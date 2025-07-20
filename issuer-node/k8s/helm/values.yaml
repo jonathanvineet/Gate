@@ -1,0 +1,148 @@
+global:
+  vaultpwd: pepe
+  uidomain: ui.issuernode.polygonid.me
+  apidomain: api.issuernode.polygonid.me
+
+issuernode_repository_image: privadoid/issuernode-api
+issuernode_repository_tag: latest
+issuernode_ui_repository_image: privadoid/issuernode-ui
+issuernode_ui_repository_tag: latest
+uiPassword: password
+issuerUiInsecure: false
+issuerName: "My Issuer!"
+ingressEnabled: true
+privateKey:
+namespace: issuer-node
+issuerResolverFile: ""
+
+
+apiIssuerNode:
+  deployment:
+    replicaCount: 1
+    name: api-issuer-node
+    env:
+      issuerDatabaseUrl: postgres://$(ISSUER_DB_USER):$(ISSUER_DB_PASSWORD)@postgres-issuer-node-svc:$(ISSUER_DB_PORT)/$(ISSUER_DB_NAME)?sslmode=disable
+      issuerKeyStoreAddress: http://vault-issuer-node-svc:$(ISSUER_KEY_STORE_PORT)
+    imagePullPolicy: Always
+    labels:
+      app: api-issuer-node-deployment
+    livenessProbe:
+      name: Custom-Header
+      value: Awesome
+      path: /status
+      port: 3001
+      initialDelaySeconds: 3
+      periodSeconds: 60 
+    apiconfigMapRef: issuer-node-api-configmap
+    args: 
+      - '"./migrate; ./platform"'
+    command:  
+      - '"sh", "-c"'
+    containerPort: 3001
+    containerName: api
+
+  service:
+    name: api-issuer-node-svc
+    ports:
+    - port: 3001
+      protocol: TCP
+      targetPort: 3001
+    type: ClusterIP
+    nodePort: 30001
+    selector: api-issuer-node
+    labels:
+      app: issuer-node
+
+  configMap:
+    issuerApiAuthPassword: password-issuer
+    issuerApiAuthUser: user-issuer
+    issuerCircuitPath: ./pkg/credentials/circuits
+    issuerDbName: platformid
+    issuerDbPassword: strongpasswordapp
+    issuerDbPort: "5432"
+    issuerDbUser: polygonid
+    issuerKMSBJJProvider: vault
+    issuerKMSETHProvider: vault
+    issuerKeyStorePluginIden3MountPath: iden3
+    issuerKeyStorePort: "8200"
+    issuerLogLevel: "-4"
+    issuerLogMode: "2"
+    issuerNativeProofGenerationEnabled: "true"
+    issuerOnchainCheckStatusFrequency: 1m
+    issuerOnchainPublishStateFrequency: 1m
+    issuerPublishKeyPath: pbkey
+    issuerRedisUrl: redis://@redis-issuer-node-svc:6379/1
+    issuerReverseHashServiceEnabled: "false"
+    issuerServerPort: "3001"
+    issuerName: issuer-node-api-configmap
+    issuerVaultUserpassAuthEnabled: "true"
+    issuerCredentialStatusPublishingKeyPath: pbkey
+    issuerIpfsGatewayUrl: https://gateway.pinata.cloud
+    issuerKMSProviderLocalStorageFilePath: /localstoragekeys
+  
+notificationsIssuerNode:
+  deployment:
+    replicaCount: 1
+    name: notifications-issuer-node
+    env:
+      issuerDatabaseUrl: postgres://$(ISSUER_DB_USER):$(ISSUER_DB_PASSWORD)@postgres-issuer-node-svc:$(ISSUER_DB_PORT)/$(ISSUER_DB_NAME)?sslmode=disable
+      issuerKeyStoreAddress: http://vault-issuer-node-svc:$(ISSUER_KEY_STORE_PORT)
+    imagePullPolicy: IfNotPresent
+    labels: 
+      app: notifications-issuer-node-deployment
+    containerName: notifications
+    args: 
+      - '"./notifications"'
+    command:  
+      - '"sh", "-c"'
+
+pendingPublisherIssuerNode:
+  deployment:
+    replicaCount: 1
+    name: pending-publisher-issuer-node
+    env:
+      issuerDatabaseUrl: postgres://$(ISSUER_DB_USER):$(ISSUER_DB_PASSWORD)@postgres-issuer-node-svc:$(ISSUER_DB_PORT)/$(ISSUER_DB_NAME)?sslmode=disable
+      issuerKeyStoreAddress: http://vault-issuer-node-svc:$(ISSUER_KEY_STORE_PORT)
+    imagePullPolicy: Always
+    labels: 
+      app: pending-publisher-issuer-node-deployment
+    containerName: pending-publisher
+    args: 
+      - '"./pending_publisher"'
+    command:  
+      - '"sh", "-c"'
+
+uiIssuerNode:
+  deployment:
+    replicaCount: 1
+    name: ui-issuer-node
+    imagePullPolicy: Always
+    uiconfigMapRef: issuer-node-ui-configmap
+    containerName: ui
+    containerPort: 80
+    labels: 
+      app: ui-issuer-node-deployment
+  service:
+    name: ui-issuer-node-svc
+    ports:
+    - port: 8080
+      protocol: TCP
+      targetPort: 80
+    type: ClusterIP
+    nodePort: 30003
+    selector: ui-issuer-node
+  configMap:
+    issuerApiAuthUser: user-issuer
+    issuerApiAuthPassword: password-issuer
+    issuerApiUiIssuerName: my issuer k8s
+    issuerUiAuthUsername: user-ui
+    issuerUiIpfsGatewayUrl: https://ipfs.io
+    issuerApiUiName: issuer-node-ui-configmap
+    issuerUiSchemaExplorerAndBuilderUrl: https://tools.privado.id
+
+secrets:
+  name: private-key-secret
+  type: Opaque
+
+
+
