@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useState } from 'react';
 import Header from './components/Header';
 import MainContent from './components/MainContent';
@@ -44,14 +46,46 @@ function App() {
     });
   };
 
-  const handleVerify = (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => {
+  const handleVerify = async (type: 'age' | 'hackathon-creator' | 'recruiter') => {
     setVerificationType(type);
-    setUser({
-      ...user,
-      isVerified: true,
-      verificationType: type
-    });
-    setAppState('verification-result');
+
+    if (!user.id) {
+      alert('User wallet not connected');
+      return;
+    }
+
+    try {
+      // Call the issuer node API to get credentials for the user DID
+      const response = await fetch(`/issuer-node/api/v2/identities/${encodeURIComponent(user.id)}/credentials`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+          // Add authorization headers here if needed
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error(`API error: ${response.status}`);
+      }
+
+      const json = await response.json();
+
+      // Check if any credential matches the KYC verification schema type
+      const hasKycCredential = json.items?.some((cred: { vc?: { type?: string[] } }) => {
+        return cred.vc?.type?.includes('KYCAgeCredential') || cred.vc?.type?.includes('KYCVerification');
+      });
+
+      setUser({
+        ...user,
+        isVerified: hasKycCredential,
+        verificationType: type
+      });
+
+      setAppState('verification-result');
+    } catch (error) {
+      console.error('Verification failed:', error);
+      alert('Verification failed. Please try again later.');
+    }
   };
 
   const handleCreateSelect = (type: 'stake-pool' | 'hackathon' | 'job') => {
