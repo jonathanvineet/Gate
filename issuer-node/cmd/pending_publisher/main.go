@@ -23,6 +23,7 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/log"
 	"github.com/polygonid/sh-id-platform/internal/network"
 	"github.com/polygonid/sh-id-platform/internal/providers"
+	"github.com/polygonid/sh-id-platform/internal/adapters"
 	"github.com/polygonid/sh-id-platform/internal/pubsub"
 	"github.com/polygonid/sh-id-platform/internal/repositories"
 	"github.com/polygonid/sh-id-platform/internal/reversehash"
@@ -121,8 +122,8 @@ func main() {
 		*cfg.MediaTypeManager.Enabled,
 	)
 
-	identityService := services.NewIdentity(keyStore, identityRepo, mtRepo, identityStateRepo, mtService, qrService, claimsRepo, revocationRepository, connectionsRepository, storage, nil, nil, pubsub.NewMock(), *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
-	claimsService := services.NewClaim(claimsRepo, identityService, qrService, mtService, identityStateRepo, schemaLoader, storage, cfg.ServerUrl, ps, cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
+	identityService := services.NewIdentity(keyStore, identityRepo, mtRepo, identityStateRepo, mtService, qrService, claimsRepo, revocationRepository, connectionsRepository, storage, nil, nil, adapters.NewMockEventBusAdapter(ctx), *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
+	claimsService := services.NewClaim(claimsRepo, identityService, qrService, mtService, identityStateRepo, schemaLoader, storage, cfg.ServerUrl, adapters.NewPubSubEventBusAdapter(ps, ctx), cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
 
 	circuitsLoaderService := circuitLoaders.NewCircuits(cfg.Circuit.Path)
 	proofService := initProofService(circuitsLoaderService)

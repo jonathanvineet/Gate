@@ -25,6 +25,7 @@ import (
 
 	"github.com/polygonid/sh-id-platform/internal/common"
 	"github.com/polygonid/sh-id-platform/internal/config"
+	"github.com/polygonid/sh-id-platform/internal/core/bus"
 	"github.com/polygonid/sh-id-platform/internal/core/domain"
 	"github.com/polygonid/sh-id-platform/internal/core/event"
 	"github.com/polygonid/sh-id-platform/internal/core/ports"
@@ -32,7 +33,6 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/jsonschema"
 	"github.com/polygonid/sh-id-platform/internal/loader"
 	"github.com/polygonid/sh-id-platform/internal/log"
-	"github.com/polygonid/sh-id-platform/internal/pubsub"
 	"github.com/polygonid/sh-id-platform/internal/qrlink"
 	"github.com/polygonid/sh-id-platform/internal/repositories"
 	"github.com/polygonid/sh-id-platform/internal/revocationstatus"
@@ -74,14 +74,14 @@ type claim struct {
 	identityStateRepository  ports.IdentityStateRepository
 	storage                  *db.Storage
 	loader                   loader.DocumentLoader
-	publisher                pubsub.Publisher
+	eventBus                 bus.EventBus
 	ipfsClient               *shell.Shell
 	revocationStatusResolver *revocationstatus.Resolver
 	mediatypeManager         ports.MediaTypeManager
 }
 
 // NewClaim creates a new claim service
-func NewClaim(repo ports.ClaimRepository, idenSrv ports.IdentityService, qrService ports.QrStoreService, mtService ports.MtService, identityStateRepository ports.IdentityStateRepository, ld loader.DocumentLoader, storage *db.Storage, host string, ps pubsub.Publisher, ipfsGatewayURL string, revocationStatusResolver *revocationstatus.Resolver, mediatypeManager ports.MediaTypeManager, cfg config.UniversalLinks) ports.ClaimService {
+func NewClaim(repo ports.ClaimRepository, idenSrv ports.IdentityService, qrService ports.QrStoreService, mtService ports.MtService, identityStateRepository ports.IdentityStateRepository, ld loader.DocumentLoader, storage *db.Storage, host string, eventBus bus.EventBus, ipfsGatewayURL string, revocationStatusResolver *revocationstatus.Resolver, mediatypeManager ports.MediaTypeManager, cfg config.UniversalLinks) ports.ClaimService {
 	s := &claim{
 		host:                     host,
 		icRepo:                   repo,
@@ -91,7 +91,7 @@ func NewClaim(repo ports.ClaimRepository, idenSrv ports.IdentityService, qrServi
 		identityStateRepository:  identityStateRepository,
 		storage:                  storage,
 		loader:                   ld,
-		publisher:                ps,
+		eventBus:                 eventBus,
 		revocationStatusResolver: revocationStatusResolver,
 		mediatypeManager:         mediatypeManager,
 		cfg:                      cfg,
@@ -116,7 +116,7 @@ func (c *claim) Save(ctx context.Context, req *ports.CreateClaimRequest) (*domai
 		return nil, err
 	}
 	if req.SignatureProof {
-		err = c.publisher.Publish(ctx, event.CreateCredentialEvent, &event.CreateCredential{CredentialIDs: []string{claim.ID.String()}, IssuerID: req.DID.String()})
+		err = c.eventBus.Publish(event.CreateCredentialEvent, &event.CreateCredential{CredentialIDs: []string{claim.ID.String()}, IssuerID: req.DID.String()})
 		if err != nil {
 			log.Error(ctx, "publish CreateCredentialEvent", "err", err.Error(), "credential", claim.ID.String())
 		}

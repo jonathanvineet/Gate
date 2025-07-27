@@ -1,15 +1,12 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
-	"github.com/iden3/go-iden3-core/v2/w3c"
 
 	"github.com/polygonid/sh-id-platform/internal/core/ports"
 	"github.com/polygonid/sh-id-platform/internal/log"
@@ -236,7 +233,7 @@ func (s *Server) BatchVerifyCredentials(w http.ResponseWriter, r *http.Request) 
 				CredentialID:       verification.CredentialID.String(),
 				IsOwner:            false,
 				VerificationMethod: "batch_verification",
-				Timestamp:          result.Timestamp,
+				Timestamp:          time.Now().Unix(),
 				Metadata: map[string]interface{}{
 					"error": err.Error(),
 				},
@@ -258,7 +255,6 @@ func (s *Server) BatchVerifyCredentials(w http.ResponseWriter, r *http.Request) 
 
 // GetVerificationStatus provides a health check for the verification service
 func (s *Server) GetVerificationStatus(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
 	
 	type VerificationStatusResponse struct {
 		Status    string `json:"status"`

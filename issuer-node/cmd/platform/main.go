@@ -32,6 +32,7 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/packagemanager"
 	"github.com/polygonid/sh-id-platform/internal/payments"
 	"github.com/polygonid/sh-id-platform/internal/providers"
+	"github.com/polygonid/sh-id-platform/internal/adapters"
 	"github.com/polygonid/sh-id-platform/internal/pubsub"
 	"github.com/polygonid/sh-id-platform/internal/repositories"
 	"github.com/polygonid/sh-id-platform/internal/reversehash"
@@ -156,8 +157,8 @@ func main() {
 	}
 
 	revocationStatusResolver := revocationstatus.NewRevocationStatusResolver(*networkResolver)
-	identityService := services.NewIdentity(keyStore, identityRepository, mtRepository, identityStateRepository, mtService, qrService, claimsRepository, revocationRepository, connectionsRepository, storage, verifier, sessionRepository, ps, *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
-	claimsService := services.NewClaim(claimsRepository, identityService, qrService, mtService, identityStateRepository, schemaLoader, storage, cfg.ServerUrl, ps, cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
+	identityService := services.NewIdentity(keyStore, identityRepository, mtRepository, identityStateRepository, mtService, qrService, claimsRepository, revocationRepository, connectionsRepository, storage, verifier, sessionRepository, adapters.NewPubSubEventBusAdapter(ps, ctx), *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
+	claimsService := services.NewClaim(claimsRepository, identityService, qrService, mtService, identityStateRepository, schemaLoader, storage, cfg.ServerUrl, adapters.NewPubSubEventBusAdapter(ps, ctx), cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
 	proofService := services.NewProver(circuitsLoaderService)
 	displayMethodService := services.NewDisplayMethod(repositories.NewDisplayMethod(*storage))
 	schemaService := services.NewSchema(schemaRepository, schemaLoader, displayMethodService)
@@ -211,7 +212,7 @@ func main() {
 
 	api.HandlerWithOptions(
 		api.NewStrictHandlerWithOptions(
-			api.NewServer(cfg, identityService, accountService, connectionsService, claimsService, qrService, publisher, packageManager, *networkResolver, serverHealth, schemaService, linkService, displayMethodService, keyService, paymentService, discoveryService),
+			api.NewServer(cfg, identityService, accountService, connectionsService, claimsService, qrService, publisher, packageManager, *networkResolver, serverHealth, schemaService, linkService, displayMethodService, keyService, paymentService, discoveryService, nil),
 			middlewares(ctx, cfg.HTTPBasicAuth),
 			api.StrictHTTPServerOptions{
 				RequestErrorHandlerFunc:  errors.RequestErrorHandlerFunc,

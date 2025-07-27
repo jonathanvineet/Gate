@@ -14,6 +14,7 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/buildinfo"
 	"github.com/polygonid/sh-id-platform/internal/cache"
 	"github.com/polygonid/sh-id-platform/internal/config"
+	"github.com/polygonid/sh-id-platform/internal/core/bus"
 	"github.com/polygonid/sh-id-platform/internal/core/event"
 	"github.com/polygonid/sh-id-platform/internal/core/ports"
 	"github.com/polygonid/sh-id-platform/internal/core/services"
@@ -25,6 +26,7 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/log"
 	"github.com/polygonid/sh-id-platform/internal/network"
 	"github.com/polygonid/sh-id-platform/internal/providers"
+	"github.com/polygonid/sh-id-platform/internal/adapters"
 	"github.com/polygonid/sh-id-platform/internal/pubsub"
 	"github.com/polygonid/sh-id-platform/internal/repositories"
 	"github.com/polygonid/sh-id-platform/internal/reversehash"
@@ -83,7 +85,7 @@ func main() {
 	}
 
 	connectionsService := services.NewConnection(connectionsRepository, claimsRepository, storage)
-	credentialsService, err := newCredentialsService(ctx, cfg, storage, cachex, ps, keyStore)
+	credentialsService, err := newCredentialsService(ctx, cfg, storage, cachex, adapters.NewPubSubEventBusAdapter(ps, ctx), keyStore)
 	if err != nil {
 		log.Error(ctx, "cannot initialize the credential service", "err", err)
 		return
@@ -124,7 +126,7 @@ func main() {
 	<-gracefulShutdown
 }
 
-func newCredentialsService(ctx context.Context, cfg *config.Configuration, storage *db.Storage, cachex cache.Cache, ps pubsub.Client, keyStore *kms.KMS) (ports.ClaimService, error) {
+func newCredentialsService(ctx context.Context, cfg *config.Configuration, storage *db.Storage, cachex cache.Cache, eventBus bus.EventBus, keyStore *kms.KMS) (ports.ClaimService, error) {
 	identityRepository := repositories.NewIdentity()
 	claimsRepository := repositories.NewClaim()
 	mtRepository := repositories.NewIdentityMerkleTreeRepository()
@@ -158,8 +160,8 @@ func newCredentialsService(ctx context.Context, cfg *config.Configuration, stora
 		*cfg.MediaTypeManager.Enabled,
 	)
 
-	identityService := services.NewIdentity(keyStore, identityRepository, mtRepository, identityStateRepository, mtService, qrService, claimsRepository, revocationRepository, nil, storage, nil, nil, ps, *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
-	claimsService := services.NewClaim(claimsRepository, identityService, qrService, mtService, identityStateRepository, schemaLoader, storage, cfg.ServerUrl, ps, cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
+	identityService := services.NewIdentity(keyStore, identityRepository, mtRepository, identityStateRepository, mtService, qrService, claimsRepository, revocationRepository, nil, storage, nil, nil, eventBus, *networkResolver, rhsFactory, revocationStatusResolver, keyRepository)
+	claimsService := services.NewClaim(claimsRepository, identityService, qrService, mtService, identityStateRepository, schemaLoader, storage, cfg.ServerUrl, eventBus, cfg.IPFS.GatewayURL, revocationStatusResolver, mediaTypeManager, cfg.UniversalLinks)
 
 	return claimsService, nil
 }

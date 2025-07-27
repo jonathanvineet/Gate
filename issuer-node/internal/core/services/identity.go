@@ -27,6 +27,7 @@ import (
 	"github.com/jackc/pgx/v4"
 
 	"github.com/polygonid/sh-id-platform/internal/common"
+	"github.com/polygonid/sh-id-platform/internal/core/bus"
 	"github.com/polygonid/sh-id-platform/internal/core/domain"
 	"github.com/polygonid/sh-id-platform/internal/core/event"
 	"github.com/polygonid/sh-id-platform/internal/core/ports"
@@ -35,7 +36,6 @@ import (
 	"github.com/polygonid/sh-id-platform/internal/log"
 	"github.com/polygonid/sh-id-platform/internal/network"
 	"github.com/polygonid/sh-id-platform/internal/primitive"
-	"github.com/polygonid/sh-id-platform/internal/pubsub"
 	"github.com/polygonid/sh-id-platform/internal/qrlink"
 	"github.com/polygonid/sh-id-platform/internal/repositories"
 	"github.com/polygonid/sh-id-platform/internal/reversehash"
@@ -91,7 +91,7 @@ type identity struct {
 	verifier                *auth.Verifier
 
 	ignoreRHSErrors          bool
-	pubsub                   pubsub.Publisher
+	eventBus                 bus.EventBus
 	revocationStatusResolver *revocationstatus.Resolver
 	networkResolver          network.Resolver
 	rhsFactory               reversehash.Factory
@@ -100,7 +100,7 @@ type identity struct {
 
 // NewIdentity creates a new identity
 // nolint
-func NewIdentity(kms kms.KMSType, identityRepository ports.IdentityRepository, imtRepository ports.IdentityMerkleTreeRepository, identityStateRepository ports.IdentityStateRepository, mtservice ports.MtService, qrService ports.QrStoreService, claimsRepository ports.ClaimRepository, revocationRepository ports.RevocationRepository, connectionsRepository ports.ConnectionRepository, storage *db.Storage, verifier *auth.Verifier, sessionRepository ports.SessionRepository, ps pubsub.Client, networkResolver network.Resolver, rhsFactory reversehash.Factory, revocationStatusResolver *revocationstatus.Resolver, keyRepository ports.KeyRepository) ports.IdentityService {
+func NewIdentity(kms kms.KMSType, identityRepository ports.IdentityRepository, imtRepository ports.IdentityMerkleTreeRepository, identityStateRepository ports.IdentityStateRepository, mtservice ports.MtService, qrService ports.QrStoreService, claimsRepository ports.ClaimRepository, revocationRepository ports.RevocationRepository, connectionsRepository ports.ConnectionRepository, storage *db.Storage, verifier *auth.Verifier, sessionRepository ports.SessionRepository, eventBus bus.EventBus, networkResolver network.Resolver, rhsFactory reversehash.Factory, revocationStatusResolver *revocationstatus.Resolver, keyRepository ports.KeyRepository) ports.IdentityService {
 	return &identity{
 		identityRepository:       identityRepository,
 		imtRepository:            imtRepository,
@@ -115,7 +115,7 @@ func NewIdentity(kms kms.KMSType, identityRepository ports.IdentityRepository, i
 		kms:                      kms,
 		ignoreRHSErrors:          false,
 		verifier:                 verifier,
-		pubsub:                   ps,
+		eventBus:                   eventBus,
 		networkResolver:          networkResolver,
 		rhsFactory:               rhsFactory,
 		revocationStatusResolver: revocationStatusResolver,
@@ -510,7 +510,7 @@ func (i *identity) AuthenticateWithRequest(ctx context.Context, sessionID *uuid.
 	}
 
 	if connID == conn.ID { // a connection has been created so previously created credentials have to be sent
-		err = i.pubsub.Publish(ctx, event.CreateConnectionEvent, &event.CreateConnection{ConnectionID: connID.String(), IssuerID: issuerDID.String()})
+		err = i.eventBus.Publish(event.CreateConnectionEvent, &event.CreateConnection{ConnectionID: connID.String(), IssuerID: issuerDID.String()})
 		if err != nil {
 			log.Error(ctx, "sending connection notification", "err", err.Error(), "connection", connID)
 		}

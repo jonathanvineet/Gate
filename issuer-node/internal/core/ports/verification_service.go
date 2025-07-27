@@ -4,10 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
-	"github.com/iden3/go-iden3-core/v2/w3c"
 	"github.com/iden3/go-schema-processor/v2/verifiable"
-
-	"github.com/polygonid/sh-id-platform/internal/core/domain"
 )
 
 // VerificationService defines the interface for credential verification

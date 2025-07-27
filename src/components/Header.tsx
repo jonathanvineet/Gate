@@ -11,6 +11,7 @@ interface HeaderProps {
   onWalletDisconnect: () => void;
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
   onCreateSelect: (type: 'stake-pool' | 'hackathon' | 'job') => void;
+  onGetCredentials: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -18,7 +19,8 @@ const Header: React.FC<HeaderProps> = ({
   onWalletConnect,
   onWalletDisconnect,
   onVerify,
-  onCreateSelect
+  onCreateSelect,
+  onGetCredentials
 }) => {
   return (
     <header className="bg-white/10 backdrop-blur-md border-b border-white/20 sticky top-0 z-40">
@@ -36,6 +38,12 @@ const Header: React.FC<HeaderProps> = ({
 
           {/* Navigation Buttons */}
           <div className="flex items-center gap-3">
+            <button
+              onClick={onGetCredentials}
+              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition"
+            >
+              Verify
+            </button>
             <VerifyDropdown
               isConnected={user.isConnected}
               isVerified={user.isVerified}

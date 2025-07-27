@@ -15,31 +15,34 @@ import (
 
 	"github.com/polygonid/sh-id-platform/internal/core/domain"
 	"github.com/polygonid/sh-id-platform/internal/core/ports"
-	"github.com/polygonid/sh-id-platform/internal/core/services"
+	"github.com/polygonid/sh-id-platform/internal/db"
 	"github.com/polygonid/sh-id-platform/internal/log"
-	"github.com/polygonid/sh-id-platform/internal/schema"
+	schemaPkg "github.com/polygonid/sh-id-platform/internal/schema"
 )
 
 // verification is the service implementation for credential verification
 type verification struct {
-	claimRepo    ports.ClaimsRepository
+	claimRepo    ports.ClaimRepository
 	identityRepo ports.IdentityRepository
 	zkGenerator  ports.ZKGenerator
 	schemaLoader ports.SchemaService
+	storage      *db.Storage
 }
 
 // NewVerificationService creates a new verification service
 func NewVerificationService(
-	claimRepo ports.ClaimsRepository,
+	claimRepo ports.ClaimRepository,
 	identityRepo ports.IdentityRepository,
 	zkGenerator ports.ZKGenerator,
 	schemaLoader ports.SchemaService,
+	storage *db.Storage,
 ) ports.VerificationService {
 	return &verification{
 		claimRepo:    claimRepo,
 		identityRepo: identityRepo,
 		zkGenerator:  zkGenerator,
 		schemaLoader: schemaLoader,
+		storage:      storage,
 	}
 }
 
@@ -63,9 +66,9 @@ func (v *verification) VerifyCredentialOwnership(ctx context.Context, walletAddr
 	}
 
 	// Look up the credential
-	claim, err := v.claimRepo.GetByIdAndIssuer(ctx, did, credentialID)
+	claim, err := v.claimRepo.GetByIdAndIssuer(ctx, v.storage.Pgx, did, credentialID)
 	if err != nil {
-		if errors.Is(err, services.ErrCredentialNotFound) {
+		if errors.Is(err, ErrCredentialNotFound) {
 			// Check if the credential exists for this wallet as subject
 			claim, err = v.findCredentialBySubject(ctx, walletAddress, credentialID)
 			if err != nil {
@@ -80,7 +83,7 @@ func (v *verification) VerifyCredentialOwnership(ctx context.Context, walletAddr
 		result.IsOwner = true
 		
 		// Convert claim to W3C credential
-		w3cCred, err := schema.FromClaimModelToW3CCredential(*claim)
+		w3cCred, err := schemaPkg.FromClaimModelToW3CCredential(*claim)
 		if err != nil {
 			log.Warn(ctx, "failed to convert claim to W3C credential", "err", err)
 		} else {
@@ -91,8 +94,8 @@ func (v *verification) VerifyCredentialOwnership(ctx context.Context, walletAddr
 		result.Metadata["credential_type"] = claim.SchemaType
 		result.Metadata["issuer_did"] = claim.Identifier
 		result.Metadata["issuance_date"] = claim.CreatedAt
-		if claim.Expiration != nil {
-			result.Metadata["expiration_date"] = *claim.Expiration
+		if claim.Expiration != 0 {
+			result.Metadata["expiration_date"] = claim.Expiration
 		}
 	}
 
@@ -123,7 +126,7 @@ func (v *verification) VerifyCredentialsBySchema(ctx context.Context, walletAddr
 		
 		// Convert to W3C credentials
 		for _, claim := range credentials {
-			w3cCred, err := schema.FromClaimModelToW3CCredential(*claim)
+			w3cCred, err := schemaPkg.FromClaimModelToW3CCredential(*claim)
 			if err != nil {
 				log.Warn(ctx, "failed to convert claim to W3C credential", "err", err, "claimID", claim.ID)
 				continue
@@ -159,7 +162,7 @@ func (v *verification) VerifyCredentialsByType(ctx context.Context, walletAddres
 		
 		// Convert to W3C credentials
 		for _, claim := range credentials {
-			w3cCred, err := schema.FromClaimModelToW3CCredential(*claim)
+			w3cCred, err := schemaPkg.FromClaimModelToW3CCredential(*claim)
 			if err != nil {
 				log.Warn(ctx, "failed to convert claim to W3C credential", "err", err, "claimID", claim.ID)
 				continue
@@ -271,7 +274,7 @@ func (v *verification) walletAddressToDID(ctx context.Context, walletAddress str
 func (v *verification) findCredentialBySubject(ctx context.Context, walletAddress string, credentialID uuid.UUID) (*domain.Claim, error) {
 	// This would need to be implemented based on your specific data model
 	// For now, we'll return not found
-	return nil, services.ErrCredentialNotFound
+	return nil, ErrCredentialNotFound
 }
 
 // findCredentialsBySchema finds credentials by schema URL
@@ -283,10 +286,10 @@ func (v *verification) findCredentialsBySchema(ctx context.Context, walletAddres
 
 	// Use the existing claim repository to find claims
 	filter := &ports.ClaimsFilter{
-		SchemaID: &schemaURL,
+		SchemaHash: schemaURL,
 	}
 
-	claims, _, err := v.claimRepo.GetAll(ctx, did, filter)
+	claims, _, err := v.claimRepo.GetAllByIssuerID(ctx, v.storage.Pgx, *did, filter)
 	return claims, err
 }
 
@@ -299,10 +302,10 @@ func (v *verification) findCredentialsByType(ctx context.Context, walletAddress 
 
 	// Use the existing claim repository to find claims
 	filter := &ports.ClaimsFilter{
-		SchemaType: &credentialType,
+		SchemaType: credentialType,
 	}
 
-	claims, _, err := v.claimRepo.GetAll(ctx, did, filter)
+	claims, _, err := v.claimRepo.GetAllByIssuerID(ctx, v.storage.Pgx, *did, filter)
 	return claims, err
 }
 
@@ -315,13 +318,13 @@ func (v *verification) findAllCredentialsForWallet(ctx context.Context, walletAd
 
 	// Use the existing claim repository to find all claims
 	filter := &ports.ClaimsFilter{}
-	claims, _, err := v.claimRepo.GetAll(ctx, did, filter)
+	claims, _, err := v.claimRepo.GetAllByIssuerID(ctx, v.storage.Pgx, *did, filter)
 	return claims, err
 }
 
 // convertToVerifiedCredential converts a claim to a verified credential with status checks
 func (v *verification) convertToVerifiedCredential(ctx context.Context, claim *domain.Claim) (*ports.VerifiedCredential, error) {
-	w3cCred, err := schema.FromClaimModelToW3CCredential(*claim)
+	w3cCred, err := schemaPkg.FromClaimModelToW3CCredential(*claim)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to convert to W3C credential")
 	}
@@ -330,26 +333,25 @@ func (v *verification) convertToVerifiedCredential(ctx context.Context, claim *d
 		Credential:     w3cCred,
 		IsRevoked:      claim.Revoked,
 		IsExpired:      false,
-		IssuerDID:      claim.Identifier,
+		IssuerDID:      *claim.Identifier,
 		SchemaURL:      claim.SchemaURL,
 		CredentialType: claim.SchemaType,
 		IssuanceDate:   claim.CreatedAt.Unix(),
 	}
 
 	// Check expiration
-	if claim.Expiration != nil {
-		expirationTime := *claim.Expiration
-		verifiedCred.ExpirationDate = &expirationTime.Unix()
+	if claim.Expiration != 0 {
+		expirationTime := time.Unix(claim.Expiration, 0)
+		ts := expirationTime.Unix()
+		verifiedCred.ExpirationDate = &ts
 		verifiedCred.IsExpired = time.Now().After(expirationTime)
 	}
 
 	// Extract subject DID from credential
 	if w3cCred.CredentialSubject != nil {
-		if subjectMap, ok := w3cCred.CredentialSubject.(map[string]interface{}); ok {
-			if subjectID, exists := subjectMap["id"]; exists {
-				if subjectIDStr, ok := subjectID.(string); ok {
-					verifiedCred.SubjectDID = subjectIDStr
-				}
+		if subjectID, exists := w3cCred.CredentialSubject["id"]; exists {
+			if subjectIDStr, ok := subjectID.(string); ok {
+				verifiedCred.SubjectDID = subjectIDStr
 			}
 		}
 	}

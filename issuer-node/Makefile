@@ -97,7 +97,7 @@ endif
 
 # If you want to use localstorage as a KMS provider, you need to run this command
 .PHONY: up/localstorage
- up/localstorage:
+up/localstorage:
 	$(DOCKER_COMPOSE_INFRA_CMD) up -d redis postgres
 
 # Build the docker image for the issuer-api
@@ -153,7 +153,7 @@ run-ui: build-ui add-host-url-swagger
 	COMPOSE_DOCKER_CLI_BUILD=1 $(DOCKER_COMPOSE_CMD) up -d ui
 
 # Run all services
-.PHONE: run-all
+.PHONY: run-all
 run-all: build-api build-ui validate_localstorage_file up add-host-url-swagger
 	COMPOSE_DOCKER_CLI_BUILD=1 $(DOCKER_COMPOSE_CMD) up -d ui api pending_publisher notifications
 
@@ -296,3 +296,28 @@ print-commands:
 clean-volumes:
 	$(DOCKER_COMPOSE_INFRA_CMD) down -v
 	$(DOCKER_COMPOSE_FULL_CMD) down -v
+
+.PHONY: build api down clean logs
+
+# Default target
+all: build api
+
+# Build the project
+build:
+	docker compose -f infrastructure/local/docker-compose-full.yml build
+
+# Start the API
+api:
+	docker compose -f infrastructure/local/docker-compose-full.yml up -d
+
+# Stop all services
+down:
+	docker compose -f infrastructure/local/docker-compose-full.yml down
+
+# Clean up Docker resources
+clean:
+	docker system prune -a --volumes
+
+# Show logs
+logs:
+	docker compose -f infrastructure/local/docker-compose-full.yml logs -f

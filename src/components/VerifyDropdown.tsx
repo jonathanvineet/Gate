@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Shield, Upload, X, CheckCircle } from 'lucide-react';
+import { Shield, Upload, X, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react'; // Import QRCode library
 
 interface VerifyDropdownProps {
   isConnected: boolean;
@@ -16,6 +17,9 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   const [selectedType, setSelectedType] = useState<'age' | 'hackathon-creator' | 'recruiter' | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
+  const [mockDob, setMockDob] = useState<string | null>(null);
+  const [showCorsHelp, setShowCorsHelp] = useState(false);
+  const [qrUrl, setQrUrl] = useState<string | null>(null); // State to store the QR code URL
 
   const handleFileUpload = (file: File) => {
     setProofFile(file);
@@ -41,10 +45,160 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
 
   const handleVerify = () => {
     if (selectedType && proofFile) {
-      onVerify(selectedType, proofFile);
+      // Simulate fetching DOB after verification
+      setMockDob('01-01-1990'); // Mock DOB
       setIsOpen(false);
       setSelectedType(null);
       setProofFile(null);
+    }
+  };
+
+  const handleConfirm = async () => {
+    if (!mockDob) return;
+
+    const birthday = mockDob.split('-').reverse().join(''); // Convert to YYYYMMDD format
+    const payload = {
+      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
+      type: "KYCAgeCredential",
+      credentialSubject: {
+        id: "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M",
+        birthday: parseInt(birthday, 10),
+        documentType: 2
+      },
+      expiration: 1903357766
+    };
+
+    try {
+      console.log("Creating credential with payload:", payload);
+
+      // Direct API call for credential creation
+      const response = await fetch("/api/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials", {
+        method: "POST",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy",
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
+      });
+
+      console.log("Credential response status:", response.status);
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error("Credential creation failed:", errorText);
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Credential created with ID:", result.id);
+
+      // Direct API call for fetching universal link
+      const offerUrl = `/api/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials/${result.id}/offer?type=universalLink`;
+      
+      console.log("Fetching universal link from:", offerUrl);
+      
+      const offerResponse = await fetch(offerUrl, {
+        method: "GET",
+        headers: {
+          "Accept": "application/json",
+          "Authorization": "Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy"
+        }
+      });
+
+      console.log("Offer response status:", offerResponse.status);
+
+      if (!offerResponse.ok) {
+        const errorText = await offerResponse.text();
+        console.error("Offer fetch failed:", errorText);
+        throw new Error(`Offer HTTP error! status: ${offerResponse.status}`);
+      }
+
+      const offerResult = await offerResponse.json();
+      console.log("Offer result:", offerResult);
+
+      if (offerResult.universalLink) {
+        handleUniversalLink(offerResult.universalLink);
+      } else {
+        throw new Error("No universalLink found in response");
+      }
+
+    } catch (error) {
+      console.error("API call failed:", error);
+      
+      // Check if it's a network error (likely CORS)
+      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+        setShowCorsHelp(true);
+        alert(`Network error: ${error.message}\n\nThis is likely a CORS issue. Check the CORS help section below for solutions.`);
+      } else {
+        alert(`API call failed: ${error.message}`);
+      }
+    }
+  };
+
+  const handleManualFlow = () => {
+    const credentialId = prompt("Enter the credential ID from the curl response:");
+    if (credentialId) {
+      handleOfferFlow(credentialId);
+    }
+  };
+
+  const handleOfferFlow = async (credentialId: string) => {
+    const offerCurl = `curl -X GET "https://b29983fe45b5.ngrok-free.app/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials/${credentialId}/offer?type=universalLink" \\
+  -H "Accept: application/json" \\
+  -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
+  -H "ngrok-skip-browser-warning: true"`;
+
+    console.log("=== OFFER CURL COMMAND ===");
+    console.log(offerCurl);
+    console.log("=== END CURL COMMAND ===");
+
+    try {
+      await navigator.clipboard.writeText(offerCurl);
+      
+      const universalLink = prompt(`Step 2: Get Universal Link
+
+The curl command for getting the universal link has been copied to clipboard.
+
+1. Paste and run it in your terminal
+2. Copy the 'universalLink' value from the response
+3. Paste it below:
+
+Curl command: ${offerCurl}`);
+
+      if (universalLink) {
+        handleUniversalLink(universalLink);
+      }
+    } catch (error) {
+      console.error("Failed to copy to clipboard:", error);
+      const universalLink = prompt(`Run this curl command and paste the universalLink here:\n\n${offerCurl}`);
+      if (universalLink) {
+        handleUniversalLink(universalLink);
+      }
+    }
+  };
+
+  const handleUniversalLink = async (universalLink: string) => {
+    console.log("Using Universal Link:", universalLink);
+    
+    setQrUrl(universalLink); // Set the URL for QR code generation
+
+    const confirmResult = window.confirm(
+      "Success! Your credential has been created.\n\n" +
+      "Click 'OK' to open the universal link in a new tab, or 'Cancel' to copy it to clipboard.\n\n" +
+      `Link: ${universalLink}`
+    );
+
+    if (confirmResult) {
+      window.open(universalLink, "_blank");
+    } else {
+      try {
+        await navigator.clipboard.writeText(universalLink);
+        alert("Universal link copied to clipboard!");
+      } catch (error) {
+        console.error("Failed to copy to clipboard:", error);
+        alert(`Universal link: ${universalLink}`);
+      }
     }
   };
 
@@ -52,7 +206,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
     return (
       <button className="flex items-center gap-2 bg-gray-600 text-gray-300 px-4 py-2 rounded-lg cursor-not-allowed">
         <Shield size={18} />
-        <span className="hidden sm:inline">Verify</span>
+        <span className="hidden sm:inline">Get Credentials</span>
       </button>
     );
   }
@@ -152,6 +306,62 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
               >
                 Verify Identity
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {mockDob && (
+        <div className="mt-4 p-6 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700">
+          <p className="text-gray-200 text-lg font-semibold mb-4">Date of Birth: {mockDob}</p>
+          <button
+            onClick={handleConfirm}
+            className="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 transform hover:scale-105"
+          >
+            Confirm & Get Credential
+          </button>
+        </div>
+      )}
+
+      {qrUrl && (
+        <div className="mt-4 p-6 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700">
+          <h3 className="text-gray-200 text-lg font-semibold mb-4">Scan using your phone</h3>
+          <div className="flex justify-center mb-4">
+            <QRCodeSVG value={qrUrl} size={200} className="rounded-lg" />
+          </div>
+          <p className="text-sm text-gray-400 break-all">{qrUrl}</p>
+        </div>
+      )}
+
+      {showCorsHelp && (
+        <div className="mt-4 p-6 bg-yellow-900/50 rounded-lg border border-yellow-600/50">
+          <div className="flex items-start gap-3">
+            <AlertCircle className="text-yellow-400 mt-1 flex-shrink-0" size={20} />
+            <div className="text-sm text-yellow-100">
+              <h4 className="font-semibold mb-2">CORS Solutions:</h4>
+              <ol className="list-decimal list-inside space-y-1 mb-3">
+                <li>Install "CORS Unblock" browser extension</li>
+                <li>Add CORS headers to your API server</li>
+                <li>Use ngrok with authentication token (paid plan)</li>
+                <li>Run Chrome with --disable-web-security flag (dev only)</li>
+              </ol>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setShowCorsHelp(false)}
+                  className="text-yellow-400 hover:text-yellow-300 underline"
+                >
+                  Dismiss
+                </button>
+                <button
+                  onClick={() => {
+                    setShowCorsHelp(false);
+                    handleManualFlow();
+                  }}
+                  className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors"
+                >
+                  Use Manual Process
+                </button>
+              </div>
             </div>
           </div>
         </div>
