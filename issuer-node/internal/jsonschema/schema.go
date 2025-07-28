@@ -18,8 +18,8 @@ import (
 )
 
 const (
-	fakeUserDID   = "did:polygonid:polygon:mumbai:2qDDDKmo436EZGCBAvkqZjADYoNRJszkG7UymZeCHQ"
-	fakeIssuerDID = "did:polygonid:polygon:mumbai:2qH7XAwYQzCp9VfhpNgeLtK2iCehDDrfMWUCEg5ig5"
+	fakeUserDID   = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a"
+	fakeIssuerDID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a"
 )
 
 // Attributes is a list of Attribute entities

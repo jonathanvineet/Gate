@@ -196,9 +196,9 @@ func main() {
 	mux := chi.NewRouter()
 
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   []string{"localhost", "127.0.0.1", "*"},
+		AllowedOrigins:   []string{"localhost", "127.0.0.1", "*", "https://wallet.privado.id"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "ngrok-skip-browser-warning"},
 		AllowCredentials: true,
 	})
 

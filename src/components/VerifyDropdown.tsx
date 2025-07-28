@@ -8,6 +8,9 @@ interface VerifyDropdownProps {
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
 }
 
+const ISSUER_DID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a";
+const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
+
 const VerifyDropdown: React.FC<VerifyDropdownProps> = ({ 
   isConnected, 
   isVerified, 
@@ -61,7 +64,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
       type: "KYCAgeCredential",
       credentialSubject: {
-        id: "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M",
+        id: SUBJECT_DID,
         birthday: parseInt(birthday, 10),
         documentType: 2
       },
@@ -72,7 +75,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       console.log("Creating credential with payload:", payload);
 
       // Direct API call for credential creation
-      const response = await fetch("/api/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials", {
+      const response = await fetch(`/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials`, {
         method: "POST",
         headers: {
           "Accept": "application/json",
@@ -93,8 +96,11 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       const result = await response.json();
       console.log("Credential created with ID:", result.id);
 
+      // Wait for 2 seconds before fetching the offer
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       // Direct API call for fetching universal link
-      const offerUrl = `/api/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials/${result.id}/offer?type=universalLink`;
+      const offerUrl = `/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials/${result.id}/offer?type=universalLink`;
       
       console.log("Fetching universal link from:", offerUrl);
       
@@ -144,7 +150,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   };
 
   const handleOfferFlow = async (credentialId: string) => {
-    const offerCurl = `curl -X GET "https://b29983fe45b5.ngrok-free.app/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials/${credentialId}/offer?type=universalLink" \\
+    const offerCurl = `curl -X GET "https://beab43d59fe9.ngrok-free.app/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials/${credentialId}/offer?type=universalLink" \\
   -H "Accept: application/json" \\
   -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
   -H "ngrok-skip-browser-warning: true"`;
