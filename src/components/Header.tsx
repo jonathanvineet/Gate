@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Zap, CheckCircle } from 'lucide-react';
 import VerifyDropdown from './VerifyDropdown';
 import CreateDropdown from './CreateDropdown';
 import WalletConnection from './WalletConnection';
@@ -24,14 +24,17 @@ const Header: React.FC<HeaderProps> = ({
   onGetCredentials
 }) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  const [isVerificationComplete, setIsVerificationComplete] = useState(false);
 
   const handleVerificationClick = () => {
-    setIsVerificationModalOpen(true);
+    if (!isVerificationComplete) {
+      setIsVerificationModalOpen(true);
+    }
   };
 
   const handleVerificationComplete = (success: boolean) => {
     if (success) {
-      // Update user verification status or trigger any success actions
+      setIsVerificationComplete(true);
       console.log('Verification successful!');
     } else {
       console.log('Verification failed!');
@@ -57,10 +60,23 @@ const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-3">
               <button
                 onClick={handleVerificationClick}
-                className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition"
+                className={`px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold ${
+                  isVerificationComplete 
+                    ? 'bg-green-500 hover:bg-green-600 text-white cursor-default shadow-lg shadow-green-500/25' 
+                    : 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-500/25'
+                }`}
+                disabled={isVerificationComplete}
               >
-                Verify
+                {isVerificationComplete ? (
+                  <>
+                    <CheckCircle size={16} />
+                    Verified
+                  </>
+                ) : (
+                  'Verify'
+                )}
               </button>
+              
               <VerifyDropdown
                 isConnected={user.isConnected}
                 isVerified={user.isVerified}

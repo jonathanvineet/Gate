@@ -61,7 +61,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
 
     const birthday = mockDob.split('-').reverse().join(''); // Convert to YYYYMMDD format
     const payload = {
-      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
+      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
       type: "KYCAgeCredential",
       credentialSubject: {
         id: SUBJECT_DID,

@@ -5,6 +5,63 @@ import getRawBody from 'raw-body';
 import cors from 'cors';
 import { fileURLToPath } from 'url';
 
+// Simple in-memory rate limiter
+class RateLimiter {
+  constructor(windowMs = 60000, maxRequests = 10) {
+    this.windowMs = windowMs;
+    this.maxRequests = maxRequests;
+    this.requests = new Map();
+  }
+
+  isAllowed(identifier) {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+    
+    // Clean old entries
+    if (!this.requests.has(identifier)) {
+      this.requests.set(identifier, []);
+    }
+    
+    const userRequests = this.requests.get(identifier);
+    const validRequests = userRequests.filter(timestamp => timestamp > windowStart);
+    
+    if (validRequests.length >= this.maxRequests) {
+      return false;
+    }
+    
+    validRequests.push(now);
+    this.requests.set(identifier, validRequests);
+    return true;
+  }
+
+  getRemainingRequests(identifier) {
+    const now = Date.now();
+    const windowStart = now - this.windowMs;
+    
+    if (!this.requests.has(identifier)) {
+      return this.maxRequests;
+    }
+    
+    const userRequests = this.requests.get(identifier);
+    const validRequests = userRequests.filter(timestamp => timestamp > windowStart);
+    return Math.max(0, this.maxRequests - validRequests.length);
+  }
+
+  getResetTime(identifier) {
+    if (!this.requests.has(identifier) || this.requests.get(identifier).length === 0) {
+      return 0;
+    }
+    
+    const userRequests = this.requests.get(identifier);
+    const oldestRequest = Math.min(...userRequests);
+    return Math.max(0, (oldestRequest + this.windowMs) - Date.now());
+  }
+}
+
+// Create rate limiters for different endpoints
+const qrDataLimiter = new RateLimiter(60000, 5); // 5 requests per minute
+const callbackLimiter = new RateLimiter(60000, 10); // 10 requests per minute
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -39,12 +96,26 @@ app.use(cors({
   credentials: false
 }));
 
+// Middleware to check rate limiting
+function checkRateLimit(limiter, key, res) {
+  if (!limiter.isAllowed(key)) {
+    return res.status(429).json({
+      error: 'Rate limit exceeded',
+      message: 'Too many requests, please try again later',
+      remaining: limiter.getRemainingRequests(key),
+      resetIn: limiter.getResetTime(key)
+    });
+  }
+}
+
 app.get("/api/sign-in", (req, res) => {
   console.log("get Auth Request");
   getAuthRequest(req, res);
 });
 
 app.post("/api/callback", (req, res) => {
+  const rateLimitCheck = checkRateLimit(callbackLimiter, req.ip, res);
+  if (rateLimitCheck) return rateLimitCheck;
   console.log("Callback received");
   console.log("Host:", req.get("host"));
   console.log("Protocol:", req.protocol);
@@ -87,6 +158,8 @@ app.all('/v2/agent', (req, res) => {
 
 // Add this new endpoint for QR data that the verification modal is trying to access
 app.get("/api/qr-data", (req, res) => {
+  const rateLimitCheck = checkRateLimit(qrDataLimiter, req.ip, res);
+  if (rateLimitCheck) return rateLimitCheck;
   console.log("get QR Data for React");
   // Just call generateQRData, do not set CORS headers manually
   generateQRData(req, res);
@@ -207,6 +280,22 @@ async function getAuthRequest(req, res) {
   return res.status(200).set("Content-Type", "application/json").send(fullRequest);
 }
 
+// Store verification results
+const verificationResults = new Map();
+
+// Add verification status endpoint
+app.get("/api/verification-status/:sessionId", (req, res) => {
+  const sessionId = req.params.sessionId;
+  const result = verificationResults.get(sessionId);
+  
+  res.json({
+    completed: !!result,
+    success: result?.success || false,
+    message: result?.message || '',
+    timestamp: result?.timestamp || null
+  });
+});
+
 // Callback verifies the proof after sign-in callbacks
 async function callback(req, res) {
   try {
@@ -216,6 +305,9 @@ async function callback(req, res) {
     // get JWZ token params from the post request
     const raw = await getRawBody(req);
     const tokenStr = raw.toString().trim();
+
+    console.log("Callback sessionId:", sessionId);
+    console.log("Callback raw body:", tokenStr);
 
     const keyDIR = "../keys";
 
@@ -227,7 +319,7 @@ async function callback(req, res) {
       ["privado:main"]: new resolver.EthStateResolver(
         "https://rpc-mainnet.privado.id",
         "0x3C9acB2205Aa72A05F6D77d708b5Cf85FCa3a896"
-      )
+      ),
     };
 
     // fetch authRequest from sessionID
@@ -243,33 +335,110 @@ async function callback(req, res) {
       stateResolver: resolvers,
       circuitsDir: path.join(__dirname, keyDIR),
       ipfsGatewayURL: "https://ipfs.io",
-    });
-
-    const opts = {
       AcceptedStateTransitionDelay: 5 * 60 * 1000, // 5 minute
-    };
-    
+    });
+    const opts = {};
     const authResponse = await verifier.fullVerify(tokenStr, authRequest, opts);
     console.log("Verification successful:", authResponse);
-    
-    // Build the redirect URL
-    let redirectUrl;
-    const host = req.get("host");
-    const protocol = host.includes("ngrok") ? "https" : req.protocol;
-    redirectUrl = `${protocol}://${host}/?verification=success`;
-    
-    console.log("Redirecting to:", redirectUrl);
-    
-    // Return an HTML that will auto-redirect
-    return res.send(`
+
+    // Store verification result
+    verificationResults.set(sessionId, {
+      success: true,
+      message: 'Verification completed successfully!',
+      timestamp: Date.now()
+    });
+
+    // Send HTML with JavaScript that posts message to parent window
+    return res.set('ngrok-skip-browser-warning', 'true').send(`
       <html>
         <head>
-          <meta http-equiv="refresh" content="0;url=${redirectUrl}">
+          <title>Verification Complete</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f0f8ff; }
+            .success { color: #22c55e; font-size: 24px; margin-bottom: 20px; }
+            .message { color: #333; font-size: 16px; margin-bottom: 10px; }
+            .small { color: #666; font-size: 12px; }
+          </style>
         </head>
         <body>
-          <p>Verification successful! Redirecting...</p>
+          <div class="success">✅ Verification Successful!</div>
+          <div class="message">Your identity has been verified.</div>
+          <div class="small">This window will close automatically...</div>
+          <div class="small" style="margin-top: 10px;">Session: ${sessionId}</div>
+          
           <script>
-            window.location.href = "${redirectUrl}";
+            console.log('🚀 Callback page loaded - sending postMessage to parent');
+            console.log('window.opener exists:', !!window.opener);
+            console.log('window.parent exists:', !!window.parent);
+            console.log('Session ID:', '${sessionId}');
+            
+            function sendMessage() {
+              const message = {
+                type: 'verificationSuccess',
+                sessionId: '${sessionId}',
+                message: 'Verification completed successfully! Your identity has been verified.',
+                timestamp: Date.now()
+              };
+              
+              console.log('📤 Attempting to send SUCCESS message:', message);
+              
+              let sent = false;
+              
+              // Try window.opener (popup scenario)
+              if (window.opener && typeof window.opener.postMessage === 'function') {
+                console.log('📤 Sending via window.opener');
+                window.opener.postMessage(message, '*');
+                sent = true;
+              }
+              
+              // Try window.parent (iframe scenario)
+              if (window.parent && window.parent !== window && typeof window.parent.postMessage === 'function') {
+                console.log('📤 Sending via window.parent');
+                window.parent.postMessage(message, '*');
+                sent = true;
+              }
+              
+              // Try to broadcast to all windows (last resort)
+              if (!sent) {
+                console.log('📤 Broadcasting message');
+                // This won't work due to security restrictions, but worth trying
+                try {
+                  parent.postMessage(message, '*');
+                } catch (e) {
+                  console.log('❌ Broadcast failed:', e.message);
+                }
+              }
+              
+              return sent;
+            }
+            
+            // Try to send message multiple times
+            let attempts = 0;
+            const maxAttempts = 10;
+            
+            function attemptSend() {
+              attempts++;
+              console.log(\`📤 Send attempt \${attempts}/\${maxAttempts}\`);
+              
+              const sent = sendMessage();
+              
+              if (!sent && attempts < maxAttempts) {
+                setTimeout(attemptSend, 500);
+              } else if (sent) {
+                console.log('✅ Message sent successfully');
+              } else {
+                console.log('❌ Failed to send message after all attempts');
+              }
+            }
+            
+            // Start sending attempts
+            attemptSend();
+            
+            // Auto-close window after message delivery attempts
+            setTimeout(() => {
+              console.log('🔒 Auto-closing verification window');
+              window.close();
+            }, 5000);
           </script>
         </body>
       </html>
@@ -277,24 +446,67 @@ async function callback(req, res) {
   } catch (error) {
     console.error("Verification error:", error);
     
-    // Build the redirect URL
-    let redirectUrl;
-    const host = req.get("host");
-    const protocol = host.includes("ngrok") ? "https" : req.protocol;
-    redirectUrl = `${protocol}://${host}/?verification=failed`;
+    // Store verification result
+    verificationResults.set(req.query.sessionId, {
+      success: false,
+      message: `Verification failed: ${error.message || "Unknown error"}`,
+      timestamp: Date.now()
+    });
     
-    console.log("Redirecting to:", redirectUrl);
-    
-    // Return an HTML that will auto-redirect
-    return res.send(`
+    // Send HTML with JavaScript for failure case
+    return res.set('ngrok-skip-browser-warning', 'true').send(`
       <html>
         <head>
-          <meta http-equiv="refresh" content="0;url=${redirectUrl}">
+          <title>Verification Failed</title>
+          <style>
+            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #fff5f5; }
+            .error { color: #ef4444; font-size: 24px; margin-bottom: 20px; }
+            .message { color: #333; font-size: 16px; margin-bottom: 10px; }
+            .small { color: #666; font-size: 12px; }
+          </style>
         </head>
         <body>
-          <p>Verification failed. Redirecting...</p>
+          <div class="error">❌ Verification Failed</div>
+          <div class="message">Please try again.</div>
+          <div class="small">This window will close automatically...</div>
+          
           <script>
-            window.location.href = "${redirectUrl}";
+            console.log('🚀 Callback page loaded (FAILED) - sending postMessage to parent');
+            console.log('window.opener exists:', !!window.opener);
+            console.log('Error:', '${error.message || "Unknown error"}');
+            
+            function sendMessage() {
+              if (window.opener && typeof window.opener.postMessage === 'function') {
+                const message = {
+                  type: 'verificationFailure',
+                  sessionId: '${req.query.sessionId}',
+                  message: 'Verification failed: ${error.message || "Unknown error"}',
+                  error: '${error.message || "Unknown error"}',
+                  timestamp: Date.now()
+                };
+                
+                console.log('📤 Sending FAILURE message to parent:', message);
+                window.opener.postMessage(message, '*');
+                return true;
+              } else {
+                console.error('❌ No opener window available or postMessage not supported');
+                return false;
+              }
+            }
+            
+            // Try to send message immediately
+            const sent = sendMessage();
+            
+            // Try again after a short delay
+            if (sent) {
+              setTimeout(sendMessage, 100);
+            }
+            
+            // Auto-close window
+            setTimeout(() => {
+              console.log('🔒 Auto-closing verification window');
+              window.close();
+            }, 2000);
           </script>
         </body>
       </html>
@@ -317,18 +529,17 @@ async function generateQRData(req, res) {
       // For local development, force the ngrok URL instead of localhost
       hostUrl = "https://a402836e773f.ngrok-free.app"; // Replace with your actual ngrok URL
     }
-    
     const audience = ISSUER_DID;
-    const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;
+    const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;    
     
     console.log("Using callback URI for QR data:", uri);
-
+    
     // Generate request for basic authentication
     const request = auth.createAuthorizationRequest("test flow", audience, uri);
 
     // Set agent URL to your own server
     request.agentUrl = `${hostUrl}/v2/agent`;
-    
+
     // Add request for a specific proof
     const proofRequest = {
       id: 1,
@@ -344,7 +555,6 @@ async function generateQRData(req, res) {
         },
       },
     };
-    
     const scope = request.body.scope ?? [];
     request.body.scope = [...scope, proofRequest];
 
