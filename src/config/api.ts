@@ -33,7 +33,7 @@ export const getOfferUrl = (credentialId: string): string => {
 
 export const createCredentialPayload = (birthday: string) => {
   return {
-    credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
+    credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
     type: "KYCAgeCredential",
     credentialSubject: {
       id: SUBJECT_DID,

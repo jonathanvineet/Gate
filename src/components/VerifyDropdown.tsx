@@ -8,9 +8,6 @@ interface VerifyDropdownProps {
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
 }
 
-const ISSUER_DID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a";
-const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
-
 const VerifyDropdown: React.FC<VerifyDropdownProps> = ({ 
   isConnected, 
   isVerified, 
@@ -23,6 +20,9 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   const [mockDob, setMockDob] = useState<string | null>(null);
   const [showCorsHelp, setShowCorsHelp] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null); // State to store the QR code URL
+
+  const ISSUER_DID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a";
+  const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
 
   const handleFileUpload = (file: File) => {
     setProofFile(file);
@@ -61,7 +61,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
 
     const birthday = mockDob.split('-').reverse().join(''); // Convert to YYYYMMDD format
     const payload = {
-      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
+      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
       type: "KYCAgeCredential",
       credentialSubject: {
         id: SUBJECT_DID,
@@ -75,7 +75,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       console.log("Creating credential with payload:", payload);
 
       // Direct API call for credential creation
-      const response = await fetch(`/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials`, {
+      const response = await fetch("/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2ShNqjm29gnw2kXgwap11PovCATJE94M82V5uHbtTm/credentials", {
         method: "POST",
         headers: {
           "Accept": "application/json",
@@ -100,7 +100,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       await new Promise(resolve => setTimeout(resolve, 2000));
 
       // Direct API call for fetching universal link
-      const offerUrl = `/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials/${result.id}/offer?type=universalLink`;
+      const offerUrl = `/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2ShNqjm29gnw2kXgwap11PovCATJE94M82V5uHbtTm/credentials/${result.id}/offer?type=universalLink`;
       
       console.log("Fetching universal link from:", offerUrl);
       
@@ -150,7 +150,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   };
 
   const handleOfferFlow = async (credentialId: string) => {
-    const offerCurl = `curl -X GET "https://beab43d59fe9.ngrok-free.app/v2/identities/${encodeURIComponent(ISSUER_DID)}/credentials/${credentialId}/offer?type=universalLink" \\
+    const offerCurl = `curl -X GET "https://beab43d59fe9.ngrok-free.app/v2/identities/did%3Aiden3%3Aprivado%3Amain%3A2Sh3kyJ2ajVwQgrg4Lho86y3WgjssMXn9U9VWJ974S/credentials/${credentialId}/offer?type=universalLink" \\
   -H "Accept: application/json" \\
   -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
   -H "ngrok-skip-browser-warning: true"`;

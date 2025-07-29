@@ -176,8 +176,7 @@ async function getAuthRequest(req, res) {
     query: {
       allowedIssuers: ["*"],
       type: "KYCAgeCredential",
-      context:
-        "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
+      context: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
       credentialSubject: {
         birthday: {
           $lt: 20000101,
@@ -339,7 +338,6 @@ async function generateQRData(req, res) {
         type: "KYCAgeCredential",
         context: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
         credentialSubject: {
-          id: SUBJECT_DID,
           birthday: {
             $lt: 20000101,
           },
