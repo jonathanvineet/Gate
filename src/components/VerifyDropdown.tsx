@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Shield, Upload, X, CheckCircle, AlertCircle, QrCode } from 'lucide-react';
+import { Shield, Upload, X, CheckCircle, AlertCircle, QrCode, Loader2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react'; // Import QRCode library
 
 interface VerifyDropdownProps {
@@ -20,7 +20,8 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   const [mockDob, setMockDob] = useState<string | null>(null);
   const [showCorsHelp, setShowCorsHelp] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null); // State to store the QR code URL
-
+  const [isLoading, setIsLoading] = useState(false);
+  const [isCreatingCredential, setIsCreatingCredential] = useState(false);
   const ISSUER_DID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a";
   const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
 
@@ -48,11 +49,16 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
 
   const handleVerify = () => {
     if (selectedType && proofFile) {
-      // Simulate fetching DOB after verification
-      setMockDob('01-01-1990'); // Mock DOB
-      setIsOpen(false);
-      setSelectedType(null);
-      setProofFile(null);
+      setIsLoading(true);
+      
+      // Simulate document reading with 3-second delay
+      setTimeout(() => {
+        setMockDob('01-01-1990'); // Mock DOB
+        setIsLoading(false);
+        setIsOpen(false);
+        setSelectedType(null);
+        setProofFile(null);
+      }, 3000);
     }
   };
 
@@ -208,6 +214,11 @@ Curl command: ${offerCurl}`);
     }
   };
 
+  const handleCloseQR = () => {
+    setQrUrl(null);
+    setMockDob(null);
+  };
+
   if (!isConnected) {
     return (
       <button className="flex items-center gap-2 bg-gray-600 text-gray-300 px-4 py-2 rounded-lg cursor-not-allowed">
@@ -307,11 +318,29 @@ Curl command: ${offerCurl}`);
 
               <button
                 onClick={handleVerify}
-                disabled={!selectedType || !proofFile}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={!selectedType || !proofFile || isLoading}
+                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
-                Verify Identity
+                {isLoading ? (
+                  <>
+                    <Loader2 className="animate-spin" size={20} />
+                    Reading Document...
+                  </>
+                ) : (
+                  'Verify Identity'
+                )}
               </button>
+
+              {/* Loading overlay */}
+              {isLoading && (
+                <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
+                  <div className="text-center">
+                    <Loader2 className="animate-spin mx-auto mb-3 text-purple-400" size={32} />
+                    <p className="text-gray-200 font-medium">Reading Document...</p>
+                    <p className="text-gray-400 text-sm mt-1">Please wait while we process your document</p>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -335,7 +364,13 @@ Curl command: ${offerCurl}`);
           <div className="flex justify-center mb-4">
             <QRCodeSVG value={qrUrl} size={200} className="rounded-lg" />
           </div>
-          <p className="text-sm text-gray-400 break-all">{qrUrl}</p>
+          <p className="text-sm text-gray-400 break-all mb-4">{qrUrl}</p>
+          <button
+            onClick={handleCloseQR}
+            className="px-6 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+          >
+            OK
+          </button>
         </div>
       )}
 
