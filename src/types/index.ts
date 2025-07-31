@@ -18,6 +18,7 @@ export interface StakePool {
   description: string;
   risk: 'Low' | 'Medium' | 'High';
   minStake: string;
+  requiresAge18: boolean;
 }
 
 export interface Hackathon {

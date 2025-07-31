@@ -1,9 +1,12 @@
-const ISSUER_DID = 'did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a';
+const ISSUER_DID = 'did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig'; // Updated issuer DID
 const SUBJECT_DID = 'did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M';
 
 export const API_CONFIG = {
   // Use proxy in development, direct server URL in production
-  BASE_URL: import.meta.env.DEV ? '' : 'https://a402836e773f.ngrok-free.app',
+  BASE_URL: import.meta.env.DEV ? '' : 'https://3c52dc2d710d.ngrok-free.app', // Updated issuer ngrok URL
+  
+  // Verification service URL (separate from issuer)
+  VERIFICATION_BASE_URL: 'https://7fbab6d82de1.ngrok-free.app', // Updated backend ngrok URL
   
   // Identity DID - this should match your issuer identity
   IDENTITY_DID: encodeURIComponent(ISSUER_DID),

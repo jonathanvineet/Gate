@@ -21,7 +21,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [isRequestInProgress, setIsRequestInProgress] = useState<boolean>(false);
   const [verifierWindow, setVerifierWindow] = useState<Window | null>(null);
-  const [verificationTimeout, setVerificationTimeout] = useState<NodeJS.Timeout | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
@@ -60,7 +59,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
             console.log("✅ Received SUCCESS message from child window:", event.data);
             setStatus('success');
             setVerificationMessage(event.data.message || 'Verification successful!');
-            if (verificationTimeout) clearTimeout(verificationTimeout);
             if (pollingInterval) clearInterval(pollingInterval);
             setTimeout(() => {
               onVerificationComplete(true);
@@ -76,7 +74,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
             console.log("❌ Received FAILURE message from child window:", event.data);
             setStatus('failed');
             setVerificationMessage(event.data.message || 'Verification failed');
-            if (verificationTimeout) clearTimeout(verificationTimeout);
             if (pollingInterval) clearInterval(pollingInterval);
             setTimeout(() => {
               onVerificationComplete(false);
@@ -96,14 +93,12 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
         if (verifierWindow && !verifierWindow.closed) {
           verifierWindow.close();
         }
-        if (verificationTimeout) clearTimeout(verificationTimeout);
         if (pollingInterval) clearInterval(pollingInterval);
       };
     }
-  }, [isOpen, verifierWindow, verificationTimeout, pollingInterval]);
+  }, [isOpen, verifierWindow, pollingInterval]);
 
   const initializeVerification = async () => {
-    // Prevent multiple simultaneous requests
     if (isRequestInProgress || status !== 'loading') {
       console.log('Request already in progress or not in loading state, skipping...');
       return;
@@ -115,18 +110,56 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
       setError('');
       
       console.log('Starting verification initialization...');
+      
+      // Clear any cached data first
+      verificationService.clearCache();
+      
       const data = await verificationService.getQRData();
       console.log('QR data received:', data);
+      
+      // Additional validation
+      if (!data.qrData) {
+        throw new Error('Invalid QR data received from server');
+      }
+
       setQrData(data);
       
-      // Generate QR code
-      const qrUrl = await QRCode.toDataURL(data.qrData);
-      setQrCodeUrl(qrUrl);
+      // Generate QR code with error handling
+      try {
+        const qrUrl = await QRCode.toDataURL(data.qrData, {
+          width: 256,
+          margin: 2,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          }
+        });
+        setQrCodeUrl(qrUrl);
+      } catch (qrError) {
+        console.error('QR code generation error:', qrError);
+        throw new Error('Failed to generate QR code. Please try again.');
+      }
       
       setStatus('ready');
     } catch (err) {
       console.error('Verification initialization error:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Failed to initialize verification';
+      
+      let errorMessage = 'Failed to initialize verification';
+      
+      if (err instanceof Error) {
+        if (err.message.includes('JSON LD Context')) {
+          errorMessage = 'Verification protocol error. Please try refreshing the page.';
+        } else if (err.message.includes('Invalid protocol message')) {
+          errorMessage = 'Invalid verification protocol. Please contact support if this persists.';
+        } else if (err.message.includes('Network error')) {
+          errorMessage = 'Network connection error. Please check your internet and try again.';
+        } else if (err.message.includes('fetch')) {
+          errorMessage = 'Verification service is temporarily unavailable. Please try again.';
+        } else {
+          errorMessage = err.message;
+        }
+      }
+      
       setError(errorMessage);
       setStatus('failed');
     } finally {
@@ -138,7 +171,7 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
     addDebugInfo("Starting polling for verification status");
     const interval = setInterval(async () => {
       try {
-        const response = await fetch(`https://a402836e773f.ngrok-free.app/api/verification-status/${sessionId}`, {
+        const response = await fetch(`https://7fbab6d82de1.ngrok-free.app/api/verification-status/${sessionId}`, {
           headers: { 'ngrok-skip-browser-warning': 'true' }
         });
         if (response.ok) {
@@ -169,15 +202,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
     }, 2000);
     
     setPollingInterval(interval);
-    
-    // Stop polling after 2 minutes
-    setTimeout(() => {
-      if (interval) {
-        clearInterval(interval);
-        setPollingInterval(null);
-        addDebugInfo("Polling stopped - timeout");
-      }
-    }, 120000);
   };
 
   const openVerifierWindow = (walletUrl: string) => {
@@ -206,14 +230,6 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
     if (qrData) {
       startPolling(qrData.sessionId);
     }
-    
-    // Set a timeout but don't show manual confirmation anymore
-    const timeout = setTimeout(() => {
-      addDebugInfo("Timeout reached - verification may have completed in background");
-      console.log('⏰ Verification timeout reached');
-    }, 60000); // Increase timeout to 60 seconds
-    
-    setVerificationTimeout(timeout);
     
     // Monitor if window is closed manually by user
     const checkClosed = setInterval(() => {
@@ -285,7 +301,7 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
               <Loader className="animate-spin text-blue-500" size={48} />
               <p className="text-gray-600">Waiting for verification...</p>
               <p className="text-sm text-gray-500">
-                Complete the verification in your wallet app
+                Take your time to complete the verification in your wallet app
               </p>
               
               {/* Debug info */}

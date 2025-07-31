@@ -8,7 +8,8 @@ export const stakePools: StakePool[] = [
     tvl: '$2.3M',
     description: 'High-yield staking pool with automated compounding and risk management protocols.',
     risk: 'Medium',
-    minStake: '100 USDC'
+    minStake: '100 USDC',
+    requiresAge18: true
   },
   {
     id: '2', 
@@ -17,7 +18,8 @@ export const stakePools: StakePool[] = [
     tvl: '$5.7M',
     description: 'Conservative staking strategy focused on stable returns and capital preservation.',
     risk: 'Low',
-    minStake: '50 USDC'
+    minStake: '50 USDC',
+    requiresAge18: false
   },
   {
     id: '3',
@@ -26,7 +28,8 @@ export const stakePools: StakePool[] = [
     tvl: '$890K',
     description: 'Aggressive growth pool targeting emerging DeFi protocols with high potential.',
     risk: 'High',
-    minStake: '500 USDC'
+    minStake: '500 USDC',
+    requiresAge18: true
   },
   {
     id: '4',
@@ -35,7 +38,8 @@ export const stakePools: StakePool[] = [
     tvl: '$12.1M',
     description: 'Direct Ethereum 2.0 staking with institutional-grade security and monitoring.',
     risk: 'Low',
-    minStake: '32 ETH'
+    minStake: '32 ETH',
+    requiresAge18: true
   },
   {
     id: '5',
@@ -44,7 +48,8 @@ export const stakePools: StakePool[] = [
     tvl: '$1.8M',
     description: 'Automated arbitrage opportunities across multiple blockchain networks.',
     risk: 'High',
-    minStake: '1000 USDC'
+    minStake: '1000 USDC',
+    requiresAge18: true
   },
   {
     id: '6',
@@ -53,7 +58,8 @@ export const stakePools: StakePool[] = [
     tvl: '$4.2M',
     description: 'Liquid staking with additional yield farming opportunities and governance tokens.',
     risk: 'Medium',
-    minStake: '200 USDC'
+    minStake: '200 USDC',
+    requiresAge18: false
   },
   {
     id: '7',
@@ -62,7 +68,8 @@ export const stakePools: StakePool[] = [
     tvl: '$650K',
     description: 'Machine learning-powered trading strategies with real-time market analysis.',
     risk: 'High',
-    minStake: '750 USDC'
+    minStake: '750 USDC',
+    requiresAge18: true
   },
   {
     id: '8',
@@ -71,7 +78,8 @@ export const stakePools: StakePool[] = [
     tvl: '$8.9M',
     description: 'Diversified portfolio of top-tier cryptocurrencies with automated rebalancing.',
     risk: 'Low',
-    minStake: '100 USDC'
+    minStake: '100 USDC',
+    requiresAge18: false
   },
   {
     id: '9',
@@ -80,7 +88,8 @@ export const stakePools: StakePool[] = [
     tvl: '$1.3M',
     description: 'Innovative yield farming using NFTs as collateral and reward mechanisms.',
     risk: 'Medium',
-    minStake: '300 USDC'
+    minStake: '300 USDC',
+    requiresAge18: true
   },
   {
     id: '10',
@@ -89,7 +98,8 @@ export const stakePools: StakePool[] = [
     tvl: '$3.1M',
     description: 'Optimized staking across Layer 2 solutions for maximum efficiency and lower fees.',
     risk: 'Medium',
-    minStake: '150 USDC'
+    minStake: '150 USDC',
+    requiresAge18: false
   }
 ];
 

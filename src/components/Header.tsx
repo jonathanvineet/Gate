@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Zap, CheckCircle } from 'lucide-react';
 import VerifyDropdown from './VerifyDropdown';
 import CreateDropdown from './CreateDropdown';
 import WalletConnection from './WalletConnection';
 import { User } from '../types';
 import VerificationModal from './VerificationModal';
+import { useVerification } from '../contexts/VerificationContext';
 
 interface HeaderProps {
   user: User;
@@ -24,20 +25,36 @@ const Header: React.FC<HeaderProps> = ({
   onGetCredentials
 }) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
-  const [isVerificationComplete, setIsVerificationComplete] = useState(false);
+  const { verificationState, setVerified, clearVerification } = useVerification();
 
   const handleVerificationClick = () => {
-    if (!isVerificationComplete) {
+    if (!verificationState.isVerified) {
       setIsVerificationModalOpen(true);
     }
   };
 
   const handleVerificationComplete = (success: boolean) => {
     if (success) {
-      setIsVerificationComplete(true);
-      console.log('Verification successful!');
+      setVerified(true, 'age');
+      console.log('Header: Verification successful - global state updated!');
     } else {
-      console.log('Verification failed!');
+      console.log('Header: Verification failed!');
+    }
+  };
+
+  const formatDate = (dateString: string | null) => {
+    if (!dateString) return '';
+    return new Date(dateString).toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric',
+      year: 'numeric'
+    });
+  };
+
+  // Debug function to clear verification
+  const handleClearVerification = () => {
+    if (window.confirm('Clear verification status?')) {
+      clearVerification();
     }
   };
 
@@ -58,34 +75,53 @@ const Header: React.FC<HeaderProps> = ({
 
             {/* Navigation Buttons */}
             <div className="flex items-center gap-3">
+              {/* Global Verification Status Button */}
               <button
                 onClick={handleVerificationClick}
-                className={`px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold ${
-                  isVerificationComplete 
-                    ? 'bg-green-500 hover:bg-green-600 text-white cursor-default shadow-lg shadow-green-500/25' 
-                    : 'bg-blue-500 text-white hover:bg-blue-600 shadow-lg shadow-blue-500/25'
+                className={`px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold transform hover:scale-105 ${
+                  verificationState.isVerified 
+                    ? 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white cursor-default shadow-lg shadow-green-500/25 animate-pulse' 
+                    : 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25'
                 }`}
-                disabled={isVerificationComplete}
+                disabled={verificationState.isVerified}
               >
-                {isVerificationComplete ? (
+                {verificationState.isVerified ? (
                   <>
-                    <CheckCircle size={16} />
-                    Verified
+                    <CheckCircle size={16} className="animate-bounce" />
+                    <div className="flex flex-col items-start">
+                      <span className="text-sm">Age Verified ✓</span>
+                      {verificationState.verificationDate && (
+                        <span className="text-xs opacity-80">
+                          {formatDate(verificationState.verificationDate)}
+                        </span>
+                      )}
+                    </div>
                   </>
                 ) : (
-                  'Verify'
+                  'Verify Age'
                 )}
               </button>
+
+              {/* Development Debug Button */}
+              {process.env.NODE_ENV === 'development' && verificationState.isVerified && (
+                <button
+                  onClick={handleClearVerification}
+                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                  title="Clear verification (dev only)"
+                >
+                  Clear
+                </button>
+              )}
               
               <VerifyDropdown
                 isConnected={user.isConnected}
-                isVerified={user.isVerified}
+                isVerified={verificationState.isVerified}
                 onVerify={onVerify}
               />
               
               <CreateDropdown
                 isConnected={user.isConnected}
-                isVerified={user.isVerified}
+                isVerified={verificationState.isVerified}
                 onCreateSelect={onCreateSelect}
               />
 

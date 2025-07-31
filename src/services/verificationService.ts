@@ -3,188 +3,227 @@ export interface QRData {
   qrData: string;
   walletUrl: string;
   request: any;
-}
-
-interface RequestCache {
-  data: QRData;
-  timestamp: number;
-  expiresIn: number;
+  debug?: {
+    contextUrl: string;
+    queryType: string;
+    agentUrl: string;
+  };
 }
 
 class VerificationService {
   private baseUrl: string;
-  private requestCache: Map<string, RequestCache> = new Map();
-  private lastRequestTime: number = 0;
-  private readonly MIN_REQUEST_INTERVAL = 2000; // 2 seconds between requests
-  private readonly CACHE_DURATION = 60000; // 1 minute cache
-  private readonly MAX_RETRIES = 3;
-  private readonly RETRY_DELAYS = [1000, 2000, 4000]; // Exponential backoff
+  private cachedQRData: QRData | null = null;
+  private cacheExpiry: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
   constructor() {
-    // Use your current ngrok URL
-    this.baseUrl = 'https://a402836e773f.ngrok-free.app';
+    this.baseUrl = this.getBaseUrl();
+    console.log('VerificationService initialized with baseUrl:', this.baseUrl);
   }
 
-  private async delay(ms: number): Promise<void> {
-    return new Promise(resolve => setTimeout(resolve, ms));
+  private getBaseUrl(): string {
+    if (typeof window !== 'undefined') {
+      // Check if we're running in development
+      if (window.location.hostname === 'localhost') {
+        return 'https://7fbab6d82de1.ngrok-free.app'; // Updated backend ngrok URL
+      }
+      // Use the current domain if it's a deployed version
+      return `${window.location.protocol}//${window.location.host}`;
+    }
+    return 'https://7fbab6d82de1.ngrok-free.app'; // Updated backend ngrok URL
   }
 
-  private isRateLimited(): boolean {
-    const now = Date.now();
-    const timeSinceLastRequest = now - this.lastRequestTime;
-    return timeSinceLastRequest < this.MIN_REQUEST_INTERVAL;
+  // Public method to get current base URL (for debugging)
+  public getCurrentBaseUrl(): string {
+    return this.baseUrl;
   }
 
-  private getCachedData(cacheKey: string): QRData | null {
-    const cached = this.requestCache.get(cacheKey);
-    if (!cached) return null;
-    
-    const now = Date.now();
-    const isExpired = (now - cached.timestamp) > cached.expiresIn;
-    
-    if (isExpired) {
-      this.requestCache.delete(cacheKey);
-      return null;
+  // Public method to update base URL if needed
+  public updateBaseUrl(newUrl: string): void {
+    this.baseUrl = newUrl;
+    console.log('VerificationService baseUrl updated to:', this.baseUrl);
+    // Clear cache when URL changes
+    this.clearCache();
+  }
+
+  private async makeRequest(url: string, options: RequestInit = {}, retries = 3): Promise<Response> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        console.log(`Making request (attempt ${attempt}/${retries}) to: ${url}`);
+        
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            'ngrok-skip-browser-warning': 'true',
+            'Accept': 'application/json',
+            ...options.headers,
+          },
+        });
+
+        console.log(`Response status: ${response.status}`);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error(`HTTP ${response.status}: ${errorText}`);
+          
+          if (response.status >= 500 && attempt < retries) {
+            console.log(`Server error, retrying in ${attempt * 1000}ms...`);
+            await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+            continue;
+          }
+          
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        return response;
+      } catch (error) {
+        console.error(`Request attempt ${attempt} failed:`, error);
+        
+        if (attempt === retries) {
+          if (error instanceof TypeError && error.message.includes('fetch')) {
+            throw new Error('Network error: Unable to connect to verification service. Please check your internet connection.');
+          }
+          throw error;
+        }
+        
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, attempt * 1000));
+      }
     }
     
-    console.log('Returning cached QR data');
-    return cached.data;
+    throw new Error('All retry attempts failed');
   }
 
-  private setCachedData(cacheKey: string, data: QRData): void {
-    this.requestCache.set(cacheKey, {
-      data,
-      timestamp: Date.now(),
-      expiresIn: this.CACHE_DURATION
-    });
-  }
-
-  private async makeRequest(url: string, retryCount: number = 0): Promise<QRData> {
-    try {
-      // Rate limiting check
-      if (this.isRateLimited()) {
-        const waitTime = this.MIN_REQUEST_INTERVAL - (Date.now() - this.lastRequestTime);
-        console.log(`Rate limited. Waiting ${waitTime}ms before next request`);
-        await this.delay(waitTime);
-      }
-
-      this.lastRequestTime = Date.now();
-      
-      console.log(`Making request (attempt ${retryCount + 1}/${this.MAX_RETRIES + 1}) to:`, url);
-      
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'ngrok-skip-browser-warning': 'true',
-        },
-        mode: 'cors',
-        // Add timeout
-        signal: AbortSignal.timeout(10000) // 10 second timeout
-      });
-      
-      console.log('Response status:', response.status);
-      
-      // Handle 429 (Too Many Requests) specifically
-      if (response.status === 429) {
-        const retryAfter = response.headers.get('Retry-After');
-        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : this.RETRY_DELAYS[Math.min(retryCount, this.RETRY_DELAYS.length - 1)];
-        
-        if (retryCount < this.MAX_RETRIES) {
-          console.log(`Rate limited (429). Retrying after ${waitTime}ms`);
-          await this.delay(waitTime);
-          return this.makeRequest(url, retryCount + 1);
-        } else {
-          throw new Error('Rate limit exceeded. Too many requests. Please try again later.');
-        }
-      }
-      
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Server error response:', errorText);
-        
-        // Retry on server errors (5xx) and some 4xx errors
-        if ((response.status >= 500 || response.status === 408 || response.status === 502 || response.status === 503 || response.status === 504) && retryCount < this.MAX_RETRIES) {
-          const waitTime = this.RETRY_DELAYS[Math.min(retryCount, this.RETRY_DELAYS.length - 1)];
-          console.log(`Server error ${response.status}. Retrying after ${waitTime}ms`);
-          await this.delay(waitTime);
-          return this.makeRequest(url, retryCount + 1);
-        }
-        
-        throw new Error(`Server responded with ${response.status}: ${errorText}`);
-      }
-      
-      const contentType = response.headers.get('content-type');
-      if (!contentType || !contentType.includes('application/json')) {
-        const responseText = await response.text();
-        console.error('Non-JSON response:', responseText.substring(0, 200));
-        throw new Error('Server returned non-JSON response');
-      }
-      
-      const data = await response.json();
-      console.log('QR data received successfully');
-      return data;
-      
-    } catch (error) {
-      // Handle network errors and timeouts
-      if (error.name === 'AbortError' || error.name === 'TimeoutError') {
-        if (retryCount < this.MAX_RETRIES) {
-          const waitTime = this.RETRY_DELAYS[Math.min(retryCount, this.RETRY_DELAYS.length - 1)];
-          console.log(`Request timeout. Retrying after ${waitTime}ms`);
-          await this.delay(waitTime);
-          return this.makeRequest(url, retryCount + 1);
-        }
-        throw new Error('Request timed out. Please check your connection and try again.');
-      }
-      
-      // Retry on network errors
-      if (error.message.includes('fetch') && retryCount < this.MAX_RETRIES) {
-        const waitTime = this.RETRY_DELAYS[Math.min(retryCount, this.RETRY_DELAYS.length - 1)];
-        console.log(`Network error. Retrying after ${waitTime}ms`);
-        await this.delay(waitTime);
-        return this.makeRequest(url, retryCount + 1);
-      }
-      
-      throw error;
+  private validateQRData(data: any): QRData {
+    if (!data) {
+      throw new Error('No data received from verification service');
     }
+
+    if (!data.sessionId) {
+      throw new Error('Invalid response: missing sessionId');
+    }
+
+    if (!data.qrData) {
+      throw new Error('Invalid response: missing qrData');
+    }
+
+    if (!data.walletUrl) {
+      throw new Error('Invalid response: missing walletUrl');
+    }
+
+    // Validate the QR data can be parsed
+    try {
+      const parsedQRData = JSON.parse(data.qrData);
+      
+      if (!parsedQRData.body) {
+        throw new Error('Invalid QR data: missing body');
+      }
+
+      if (!parsedQRData.body.scope || !Array.isArray(parsedQRData.body.scope)) {
+        throw new Error('Invalid QR data: missing or invalid scope');
+      }
+
+      // Check for age verification proof request
+      const hasAgeProof = parsedQRData.body.scope.some((scope: any) => 
+        scope.query?.type === 'KYCAgeCredential'
+      );
+
+      if (!hasAgeProof) {
+        throw new Error('Invalid QR data: missing age verification proof request');
+      }
+
+      console.log('QR data validation successful');
+    } catch (parseError) {
+      console.error('QR data validation failed:', parseError);
+      throw new Error(`Invalid QR data format: ${parseError instanceof Error ? parseError.message : 'Unknown parsing error'}`);
+    }
+
+    return data as QRData;
   }
 
-  async getQRData(): Promise<QRData> {
+  public async getQRData(): Promise<QRData> {
     try {
-      const url = `${this.baseUrl}/api/qr-data`;
-      const cacheKey = 'qr-data';
-      
       // Check cache first
-      const cachedData = this.getCachedData(cacheKey);
-      if (cachedData) {
-        return cachedData;
+      if (this.cachedQRData && Date.now() < this.cacheExpiry) {
+        console.log('Returning cached QR data');
+        return this.cachedQRData;
       }
-      
+
+      const url = `${this.baseUrl}/api/qr-data`;
       console.log('Fetching QR data from:', url);
       console.log('Environment DEV:', import.meta.env.DEV);
       console.log('Base URL:', this.baseUrl);
+
+      const response = await this.makeRequest(url, {
+        method: 'GET',
+        cache: 'no-cache',
+      });
+
+      const data = await response.json();
       
-      const data = await this.makeRequest(url);
+      // Validate the response
+      const validatedData = this.validateQRData(data);
       
-      // Cache the successful response
-      this.setCachedData(cacheKey, data);
+      // Cache the result
+      this.cachedQRData = validatedData;
+      this.cacheExpiry = Date.now() + this.CACHE_DURATION;
       
-      return data;
+      console.log('QR data received successfully');
+      return validatedData;
+
     } catch (error) {
-      console.error('Error getting QR data:', error);
-      throw error;
+      console.error('Error in getQRData:', error);
+      
+      // Clear cache on error
+      this.cachedQRData = null;
+      this.cacheExpiry = 0;
+      
+      if (error instanceof Error) {
+        // Provide more user-friendly error messages
+        if (error.message.includes('Network error')) {
+          throw new Error('Unable to connect to verification service. Please check your internet connection and try again.');
+        }
+        
+        if (error.message.includes('Failed to fetch')) {
+          throw new Error('Verification service is temporarily unavailable. Please try again in a few moments.');
+        }
+        
+        if (error.message.includes('JSON LD Context') || error.message.includes('Invalid protocol message')) {
+          throw new Error('Verification protocol error. Please try refreshing the page and attempting verification again.');
+        }
+        
+        throw error;
+      }
+      
+      throw new Error('Unknown error occurred while setting up verification. Please try again.');
     }
   }
 
-  
-
-  openWallet(walletUrl: string): Window | null {
-    return window.open(walletUrl, '_blank');
+  public async checkVerificationStatus(sessionId: number): Promise<{
+    completed: boolean;
+    success: boolean;
+    message: string;
+    timestamp?: number;
+  }> {
+    try {
+      const url = `${this.baseUrl}/api/verification-status/${sessionId}`;
+      const response = await this.makeRequest(url);
+      return await response.json();
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+      return {
+        completed: false,
+        success: false,
+        message: 'Unable to check verification status'
+      };
+    }
   }
 
-  setBaseUrl(url: string): void {
-    this.baseUrl = url;
+  public clearCache(): void {
+    this.cachedQRData = null;
+    this.cacheExpiry = 0;
+    console.log('Verification service cache cleared');
   }
 }
 

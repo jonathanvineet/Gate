@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import TopPicks from './TopPicks';
 import StakePools from './StakePools';
 import Hackathons from './Hackathons';
@@ -15,12 +15,14 @@ const MainContent: React.FC<MainContentProps> = ({
   onJoinHackathon,
   onApplyJob
 }) => {
+  const [userVerified, setUserVerified] = useState(false);
+
   return (
     <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <TopPicks />
-      <StakePools onJoinStakePool={onJoinStakePool} />
-      <Hackathons onJoinHackathon={onJoinHackathon} />
-      <Jobs onApplyJob={onApplyJob} />
+      <StakePools onJoinStakePool={onJoinStakePool} isUserVerified={userVerified} />
+      <Hackathons onJoinHackathon={onJoinHackathon} isUserVerified={userVerified} />
+      <Jobs onApplyJob={onApplyJob} isUserVerified={userVerified} />
     </main>
   );
 };

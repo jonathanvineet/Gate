@@ -77,8 +77,9 @@ app.use('/static', express.static(path.join(__dirname, "../static")));
 // Replace this:
 const allowedOrigins = [
   'http://localhost:5173',
-  'https://7e0f9b142388.ngrok-free.app', // your frontend ngrok URL
-  'https://a402836e773f.ngrok-free.app', // your backend ngrok URL (optional)
+  'https://93155b807c22.ngrok-free.app', // your frontend ngrok URL (updated)
+  'https://7fbab6d82de1.ngrok-free.app', // your backend ngrok URL (updated)
+  'https://3c52dc2d710d.ngrok-free.app', // your issuer ngrok URL (updated)
   'https://wallet.privado.id'
 ];
 app.use(cors({
@@ -193,91 +194,77 @@ function replaceLocalhostUrls(obj, ngrokUrl) {
   return obj;
 }
 
-const ISSUER_DID = "did:polygonid:polygon:amoy:2qY78akW9i87q2hKuPpjP3ews85TnvZPrcJwHBra1a";
+const ISSUER_DID = "did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig"; // Updated issuer DID
 const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
 
 // GetQR returns auth request
 async function getAuthRequest(req, res) {
-  // Audience is verifier id
-  const sessionId = 1;
-  const callbackURL = "/api/callback";
-  
-  // Force HTTPS for ngrok URLs
-  let hostUrl;
-  if (req.get("host").includes("ngrok")) {
-    hostUrl = `https://${req.get("host")}`;
-  } else {
-    // For local development, force the ngrok URL instead of localhost
-    hostUrl = "https://a402836e773f.ngrok-free.app"; // Replace with your actual ngrok URL
-  }
-  
-  const audience = ISSUER_DID;
-
-  const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;
-  
-  console.log("Using callback URI:", uri);
-
-  // Generate request for basic authentication
-  const request = auth.createAuthorizationRequest("test flow", audience, uri);
-
-  // Set agent URL to your own server instance
-  // Use the server that's already running
-  request.agentUrl = "https://a402836e773f.ngrok-free.app/v2/agent";
-  
-  // Force all URLs in the request to use ngrok URLs instead of localhost
-  if (request.from && request.from.includes('localhost')) {
-    request.from = request.from.replace('localhost:3000', 'a402836e773f.ngrok-free.app');
-  }
-  
-  if (request.thid && typeof request.thid === 'string' && request.thid.includes('localhost')) {
-    request.thid = request.thid.replace('localhost:3000', 'a402836e773f.ngrok-free.app');
-  }
-  
-  // Check if there are any URLs in the request body
-  if (request.body) {
-    const bodyStr = JSON.stringify(request.body);
-    if (bodyStr.includes('localhost')) {
-      const updatedBodyStr = bodyStr.replace(/localhost:3000/g, 'a402836e773f.ngrok-free.app');
-      request.body = JSON.parse(updatedBodyStr);
+  try {
+    // Audience is verifier id
+    const sessionId = Date.now();
+    const callbackURL = "/api/callback";
+    
+    // Force HTTPS for ngrok URLs
+    let hostUrl;
+    if (req.get("host").includes("ngrok")) {
+      hostUrl = `https://${req.get("host")}`;
+    } else {
+      hostUrl = "https://7fbab6d82de1.ngrok-free.app"; // Updated backend ngrok URL
     }
+    
+    const audience = ISSUER_DID;
+    const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;
+    
+    console.log("Using callback URI:", uri);
+
+    // Generate request for basic authentication with proper structure
+    const request = auth.createAuthorizationRequest("Age Verification Request", audience, uri);
+
+    // Set agent URL to your own server instance
+    request.agentUrl = `${hostUrl}/v2/agent`;
+    
+    // Add request for a specific proof with corrected context
+    const proofRequest = {
+      id: 1,
+      circuitId: "credentialAtomicQuerySigV2",
+      query: {
+        allowedIssuers: ["*"],
+        type: "KYCAgeCredential",
+        context: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
+        credentialSubject: {
+          birthday: {
+            $lt: 20060101 // Born before 2006 (18+ years old)
+          }
+        }
+      }
+    };
+
+    // Ensure body exists and has proper structure
+    if (!request.body) {
+      request.body = {};
+    }
+    
+    const scope = request.body.scope ?? [];
+    request.body.scope = [...scope, proofRequest];
+
+    // Add proper message structure
+    request.body.callbackUrl = uri;
+    request.body.reason = "Age verification for accessing 18+ staking pools";
+    request.body.message = "Please verify your age to access restricted content";
+
+    // Store auth request in map associated with session ID
+    requestMap.set(`${sessionId}`, request);
+
+    console.log("Full authorization request:", JSON.stringify(request, null, 2));
+
+    return res.status(200).set("Content-Type", "application/json").send(request);
+  } catch (error) {
+    console.error("Error generating auth request:", error);
+    return res.status(500).json({ 
+      error: "Failed to generate authorization request",
+      message: error.message 
+    });
   }
-  
-  // Add request for a specific proof
-  const proofRequest = {
-    id: 1,
-    circuitId: "credentialAtomicQuerySigV2",
-    query: {
-      allowedIssuers: ["*"],
-      type: "KYCAgeCredential",
-      context: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
-      credentialSubject: {
-        birthday: {
-          $lt: 20000101,
-        },
-      },
-    },
-  };
-  const scope = request.body.scope ?? [];
-  request.body.scope = [...scope, proofRequest];
-
-  // Store auth request in map associated with session ID
-  requestMap.set(`${sessionId}`, request);
-
-  // Log the full request for debugging
-  console.log("Full authorization request:", JSON.stringify(request, null, 2));
-
-  const ngrokHost = "a402836e773f.ngrok-free.app";
-  const ngrokUrl = `https://${ngrokHost}`;
-  
-  // Replace localhost URLs in the request object
-  const fullRequest = replaceLocalhostUrls(request, ngrokHost);
-
-  // Encode the request URL for debugging
-  const encodedUrl = Buffer.from(JSON.stringify(fullRequest)).toString('base64');
-  console.log("Encoded URL:", encodedUrl);
-
-  // Send the updated request
-  return res.status(200).set("Content-Type", "application/json").send(fullRequest);
 }
 
 // Store verification results
@@ -299,15 +286,16 @@ app.get("/api/verification-status/:sessionId", (req, res) => {
 // Callback verifies the proof after sign-in callbacks
 async function callback(req, res) {
   try {
-    // Get session ID from request
     const sessionId = req.query.sessionId;
-
-    // get JWZ token params from the post request
     const raw = await getRawBody(req);
     const tokenStr = raw.toString().trim();
 
     console.log("Callback sessionId:", sessionId);
-    console.log("Callback raw body:", tokenStr);
+    console.log("Callback token length:", tokenStr.length);
+
+    if (!tokenStr) {
+      throw new Error("No token received in callback");
+    }
 
     const keyDIR = "../keys";
 
@@ -322,191 +310,214 @@ async function callback(req, res) {
       ),
     };
 
-    // fetch authRequest from sessionID
+    // Fetch authRequest from sessionID
     const authRequest = requestMap.get(`${sessionId}`);
 
     if (!authRequest) {
       console.error("Auth request not found for session:", sessionId);
-      return res.status(400).send({ error: "Invalid session" });
+      throw new Error("Invalid session - auth request not found");
     }
 
-    // EXECUTE VERIFICATION
+    console.log("Found auth request for session:", sessionId);
+
+    // EXECUTE VERIFICATION with enhanced options
     const verifier = await auth.Verifier.newVerifier({
       stateResolver: resolvers,
       circuitsDir: path.join(__dirname, keyDIR),
       ipfsGatewayURL: "https://ipfs.io",
-      AcceptedStateTransitionDelay: 5 * 60 * 1000, // 5 minute
+      AcceptedStateTransitionDelay: 5 * 60 * 1000, // 5 minutes
     });
-    const opts = {};
+
+    const opts = {
+      acceptedStateTransitionDelay: 5 * 60 * 1000,
+      acceptedProofGenerationDelay: 5 * 60 * 1000
+    };
+
     const authResponse = await verifier.fullVerify(tokenStr, authRequest, opts);
-    console.log("Verification successful:", authResponse);
+    console.log("Verification successful for session:", sessionId);
 
     // Store verification result
     verificationResults.set(sessionId, {
       success: true,
-      message: 'Verification completed successfully!',
-      timestamp: Date.now()
+      message: 'Age verification completed successfully!',
+      timestamp: Date.now(),
+      response: authResponse
     });
 
-    // Send HTML with JavaScript that posts message to parent window
+    // Return success HTML with enhanced messaging
     return res.set('ngrok-skip-browser-warning', 'true').send(`
       <html>
         <head>
-          <title>Verification Complete</title>
+          <title>Age Verification Complete</title>
           <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #f0f8ff; }
-            .success { color: #22c55e; font-size: 24px; margin-bottom: 20px; }
-            .message { color: #333; font-size: 16px; margin-bottom: 10px; }
-            .small { color: #666; font-size: 12px; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+              text-align: center; 
+              padding: 50px; 
+              background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+              color: white;
+              margin: 0;
+            }
+            .container { 
+              background: rgba(255, 255, 255, 0.1); 
+              padding: 40px; 
+              border-radius: 20px; 
+              backdrop-filter: blur(10px);
+              max-width: 400px;
+              margin: 0 auto;
+            }
+            .success { color: #4ade80; font-size: 48px; margin-bottom: 20px; }
+            .title { font-size: 24px; margin-bottom: 15px; font-weight: 600; }
+            .message { font-size: 16px; margin-bottom: 10px; opacity: 0.9; }
+            .small { font-size: 12px; opacity: 0.7; margin-top: 20px; }
           </style>
         </head>
         <body>
-          <div class="success">✅ Verification Successful!</div>
-          <div class="message">Your identity has been verified.</div>
-          <div class="small">This window will close automatically...</div>
-          <div class="small" style="margin-top: 10px;">Session: ${sessionId}</div>
+          <div class="container">
+            <div class="success">✅</div>
+            <div class="title">Age Verification Successful!</div>
+            <div class="message">You are verified as 18+ years old</div>
+            <div class="message">You can now access all staking pools</div>
+            <div class="small">This window will close automatically...</div>
+          </div>
           
           <script>
-            console.log('🚀 Callback page loaded - sending postMessage to parent');
-            console.log('window.opener exists:', !!window.opener);
-            console.log('window.parent exists:', !!window.parent);
-            console.log('Session ID:', '${sessionId}');
+            console.log('🚀 Age verification callback page loaded');
             
-            function sendMessage() {
+            function sendSuccessMessage() {
               const message = {
                 type: 'verificationSuccess',
                 sessionId: '${sessionId}',
-                message: 'Verification completed successfully! Your identity has been verified.',
-                timestamp: Date.now()
+                message: 'Age verification completed successfully! You are now verified as 18+ years old.',
+                timestamp: Date.now(),
+                verificationType: 'age'
               };
               
-              console.log('📤 Attempting to send SUCCESS message:', message);
+              console.log('📤 Sending age verification SUCCESS message:', message);
               
-              let sent = false;
-              
-              // Try window.opener (popup scenario)
-              if (window.opener && typeof window.opener.postMessage === 'function') {
-                console.log('📤 Sending via window.opener');
+              // Try multiple methods to communicate with parent
+              if (window.opener) {
                 window.opener.postMessage(message, '*');
-                sent = true;
+                console.log('✅ Message sent via window.opener');
               }
               
-              // Try window.parent (iframe scenario)
-              if (window.parent && window.parent !== window && typeof window.parent.postMessage === 'function') {
-                console.log('📤 Sending via window.parent');
+              if (window.parent !== window) {
                 window.parent.postMessage(message, '*');
-                sent = true;
+                console.log('✅ Message sent via window.parent');
               }
               
-              // Try to broadcast to all windows (last resort)
-              if (!sent) {
-                console.log('📤 Broadcasting message');
-                // This won't work due to security restrictions, but worth trying
-                try {
-                  parent.postMessage(message, '*');
-                } catch (e) {
-                  console.log('❌ Broadcast failed:', e.message);
-                }
-              }
-              
-              return sent;
-            }
-            
-            // Try to send message multiple times
-            let attempts = 0;
-            const maxAttempts = 10;
-            
-            function attemptSend() {
-              attempts++;
-              console.log(\`📤 Send attempt \${attempts}/\${maxAttempts}\`);
-              
-              const sent = sendMessage();
-              
-              if (!sent && attempts < maxAttempts) {
-                setTimeout(attemptSend, 500);
-              } else if (sent) {
-                console.log('✅ Message sent successfully');
-              } else {
-                console.log('❌ Failed to send message after all attempts');
+              // Broadcast to all windows
+              try {
+                parent.postMessage(message, '*');
+              } catch (e) {
+                console.log('Broadcast attempt failed:', e.message);
               }
             }
             
-            // Start sending attempts
-            attemptSend();
+            // Send message multiple times to ensure delivery
+            sendSuccessMessage();
+            setTimeout(sendSuccessMessage, 500);
+            setTimeout(sendSuccessMessage, 1000);
             
-            // Auto-close window after message delivery attempts
+            // Auto-close window
             setTimeout(() => {
               console.log('🔒 Auto-closing verification window');
-              window.close();
-            }, 5000);
+              try {
+                window.close();
+              } catch (e) {
+                console.log('Window close failed:', e.message);
+              }
+            }, 3000);
           </script>
         </body>
       </html>
     `);
+
   } catch (error) {
     console.error("Verification error:", error);
     
-    // Store verification result
-    verificationResults.set(req.query.sessionId, {
+    const sessionId = req.query.sessionId;
+    
+    // Store failure result
+    verificationResults.set(sessionId, {
       success: false,
-      message: `Verification failed: ${error.message || "Unknown error"}`,
-      timestamp: Date.now()
+      message: `Age verification failed: ${error.message}`,
+      timestamp: Date.now(),
+      error: error.message
     });
     
-    // Send HTML with JavaScript for failure case
+    // Return failure HTML
     return res.set('ngrok-skip-browser-warning', 'true').send(`
       <html>
         <head>
           <title>Verification Failed</title>
           <style>
-            body { font-family: Arial, sans-serif; text-align: center; padding: 50px; background: #fff5f5; }
-            .error { color: #ef4444; font-size: 24px; margin-bottom: 20px; }
-            .message { color: #333; font-size: 16px; margin-bottom: 10px; }
-            .small { color: #666; font-size: 12px; }
+            body { 
+              font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; 
+              text-align: center; 
+              padding: 50px; 
+              background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+              color: white;
+              margin: 0;
+            }
+            .container { 
+              background: rgba(255, 255, 255, 0.1); 
+              padding: 40px; 
+              border-radius: 20px; 
+              backdrop-filter: blur(10px);
+              max-width: 400px;
+              margin: 0 auto;
+            }
+            .error { color: #fca5a5; font-size: 48px; margin-bottom: 20px; }
+            .title { font-size: 24px; margin-bottom: 15px; font-weight: 600; }
+            .message { font-size: 16px; margin-bottom: 10px; opacity: 0.9; }
+            .small { font-size: 12px; opacity: 0.7; margin-top: 20px; }
           </style>
         </head>
         <body>
-          <div class="error">❌ Verification Failed</div>
-          <div class="message">Please try again.</div>
-          <div class="small">This window will close automatically...</div>
+          <div class="container">
+            <div class="error">❌</div>
+            <div class="title">Age Verification Failed</div>
+            <div class="message">Unable to verify your age credentials</div>
+            <div class="message">Please try again or contact support</div>
+            <div class="small">Error: ${error.message}</div>
+            <div class="small">This window will close automatically...</div>
+          </div>
           
           <script>
-            console.log('🚀 Callback page loaded (FAILED) - sending postMessage to parent');
-            console.log('window.opener exists:', !!window.opener);
-            console.log('Error:', '${error.message || "Unknown error"}');
+            console.log('🚀 Verification failure callback page loaded');
             
-            function sendMessage() {
-              if (window.opener && typeof window.opener.postMessage === 'function') {
-                const message = {
-                  type: 'verificationFailure',
-                  sessionId: '${req.query.sessionId}',
-                  message: 'Verification failed: ${error.message || "Unknown error"}',
-                  error: '${error.message || "Unknown error"}',
-                  timestamp: Date.now()
-                };
-                
-                console.log('📤 Sending FAILURE message to parent:', message);
+            function sendFailureMessage() {
+              const message = {
+                type: 'verificationFailure',
+                sessionId: '${sessionId}',
+                message: 'Age verification failed: ${error.message}',
+                error: '${error.message}',
+                timestamp: Date.now()
+              };
+              
+              console.log('📤 Sending age verification FAILURE message:', message);
+              
+              if (window.opener) {
                 window.opener.postMessage(message, '*');
-                return true;
-              } else {
-                console.error('❌ No opener window available or postMessage not supported');
-                return false;
+              }
+              
+              if (window.parent !== window) {
+                window.parent.postMessage(message, '*');
               }
             }
             
-            // Try to send message immediately
-            const sent = sendMessage();
+            sendFailureMessage();
+            setTimeout(sendFailureMessage, 500);
             
-            // Try again after a short delay
-            if (sent) {
-              setTimeout(sendMessage, 100);
-            }
-            
-            // Auto-close window
             setTimeout(() => {
               console.log('🔒 Auto-closing verification window');
-              window.close();
-            }, 2000);
+              try {
+                window.close();
+              } catch (e) {
+                console.log('Window close failed:', e.message);
+              }
+            }, 3000);
           </script>
         </body>
       </html>
@@ -527,20 +538,20 @@ async function generateQRData(req, res) {
       hostUrl = `https://${req.get("host")}`;
     } else {
       // For local development, force the ngrok URL instead of localhost
-      hostUrl = "https://a402836e773f.ngrok-free.app"; // Replace with your actual ngrok URL
+      hostUrl = "https://7fbab6d82de1.ngrok-free.app"; // Updated backend ngrok URL
     }
     const audience = ISSUER_DID;
     const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;    
     
     console.log("Using callback URI for QR data:", uri);
     
-    // Generate request for basic authentication
-    const request = auth.createAuthorizationRequest("test flow", audience, uri);
+    // Generate request for basic authentication with proper message structure
+    const request = auth.createAuthorizationRequest("Age Verification", audience, uri);
 
-    // Set agent URL to your own server
+    // Set agent URL
     request.agentUrl = `${hostUrl}/v2/agent`;
 
-    // Add request for a specific proof
+    // Enhanced proof request with proper context and query structure
     const proofRequest = {
       id: 1,
       circuitId: "credentialAtomicQuerySigV2",
@@ -550,37 +561,56 @@ async function generateQRData(req, res) {
         context: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json-ld/kyc-v3.json-ld",
         credentialSubject: {
           birthday: {
-            $lt: 20000101,
-          },
-        },
-      },
+            $lt: 20060101 // Must be born before 2006-01-01 (18+ years old)
+          }
+        }
+      }
     };
+
+    // Ensure proper request body structure
+    if (!request.body) {
+      request.body = {};
+    }
+
+    // Set required fields
+    request.body.callbackUrl = uri;
+    request.body.reason = "Age verification required";
+    request.body.message = "Please verify that you are 18 years or older";
+    
     const scope = request.body.scope ?? [];
     request.body.scope = [...scope, proofRequest];
 
-    // Store auth request in map associated with session ID
+    // Store auth request
     requestMap.set(`${sessionId}`, request);
 
-    // Create wallet URL
-    const encodedRequest = Buffer.from(JSON.stringify(request)).toString('base64');
+    // Create wallet URL with proper encoding
+    const requestString = JSON.stringify(request);
+    const encodedRequest = Buffer.from(requestString).toString('base64');
     const walletUrl = `https://wallet.privado.id/#i_m=${encodedRequest}`;
 
-    // Return QR data and wallet URL
+    // Return structured response
     const responseData = {
       sessionId,
-      qrData: JSON.stringify(request),
+      qrData: requestString,
       walletUrl,
-      request: request
+      request: request,
+      debug: {
+        contextUrl: proofRequest.query.context,
+        queryType: proofRequest.query.type,
+        agentUrl: request.agentUrl
+      }
     };
     
-    console.log('Sending QR data response');
+    console.log('QR Data generated successfully');
+    console.log('Context URL:', proofRequest.query.context);
     
     return res.status(200).json(responseData);
   } catch (error) {
     console.error('Error generating QR data:', error);
     return res.status(500).json({ 
       error: 'Failed to generate QR data',
-      message: error.message 
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
     });
   }
 }

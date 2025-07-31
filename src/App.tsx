@@ -7,6 +7,7 @@ import InteractiveBackground from './components/InteractiveBackground';
 import VerificationResult from './pages/VerificationResult';
 import CreateForm from './pages/CreateForm';
 import Placeholder from './pages/Placeholder';
+import { VerificationProvider } from './contexts/VerificationContext';
 import { User } from './types';
 
 type AppState = 
@@ -139,51 +140,59 @@ function App() {
 
   if (appState === 'verification-result') {
     return (
-      <VerificationResult
-        verificationType={verificationType}
-        onContinue={handleBackToDashboard}
-      />
+      <VerificationProvider>
+        <VerificationResult
+          verificationType={verificationType}
+          onContinue={handleBackToDashboard}
+        />
+      </VerificationProvider>
     );
   }
 
   if (appState === 'create-form') {
     return (
-      <CreateForm
-        type={createType}
-        onSubmit={handleCreateSubmit}
-        onBack={handleBackToDashboard}
-      />
+      <VerificationProvider>
+        <CreateForm
+          type={createType}
+          onSubmit={handleCreateSubmit}
+          onBack={handleBackToDashboard}
+        />
+      </VerificationProvider>
     );
   }
 
   if (appState === 'placeholder') {
     return (
-      <Placeholder
-        title={placeholderData.title}
-        message={placeholderData.message}
-        onBack={handleBackToDashboard}
-      />
+      <VerificationProvider>
+        <Placeholder
+          title={placeholderData.title}
+          message={placeholderData.message}
+          onBack={handleBackToDashboard}
+        />
+      </VerificationProvider>
     );
   }
 
   return (
-    <div className="min-h-screen relative">
-      <InteractiveBackground />
-      
-      <Header
-        user={user}
-        onWalletConnect={handleWalletConnect}
-        onWalletDisconnect={handleWalletDisconnect}
-        onVerify={handleVerify}
-        onCreateSelect={handleCreateSelect}
-      />
-      
-      <MainContent
-        onJoinStakePool={(id) => handleJoinAction('stake-pool', id)}
-        onJoinHackathon={(id) => handleJoinAction('hackathon', id)}
-        onApplyJob={(id) => handleJoinAction('job', id)}
-      />
-    </div>
+    <VerificationProvider>
+      <div className="min-h-screen relative">
+        <InteractiveBackground />
+        
+        <Header
+          user={user}
+          onWalletConnect={handleWalletConnect}
+          onWalletDisconnect={handleWalletDisconnect}
+          onVerify={handleVerify}
+          onCreateSelect={handleCreateSelect}
+        />
+        
+        <MainContent
+          onJoinStakePool={(id) => handleJoinAction('stake-pool', id)}
+          onJoinHackathon={(id) => handleJoinAction('hackathon', id)}
+          onApplyJob={(id) => handleJoinAction('job', id)}
+        />
+      </div>
+    </VerificationProvider>
   );
 }
 
