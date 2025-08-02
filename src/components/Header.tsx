@@ -13,7 +13,6 @@ interface HeaderProps {
   onWalletDisconnect: () => void;
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
   onCreateSelect: (type: 'stake-pool' | 'hackathon' | 'job') => void;
-  onGetCredentials: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -21,8 +20,7 @@ const Header: React.FC<HeaderProps> = ({
   onWalletConnect,
   onWalletDisconnect,
   onVerify,
-  onCreateSelect,
-  onGetCredentials
+  onCreateSelect
 }) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const { verificationState, setVerified, clearVerification } = useVerification();
@@ -40,6 +38,8 @@ const Header: React.FC<HeaderProps> = ({
     } else {
       console.log('Header: Verification failed!');
     }
+    // Close the modal after verification
+    setIsVerificationModalOpen(false);
   };
 
   const formatDate = (dateString: string | null) => {

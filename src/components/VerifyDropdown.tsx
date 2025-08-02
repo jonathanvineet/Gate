@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
-import { Shield, Upload, X, CheckCircle, AlertCircle, QrCode, Loader2 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react'; // Import QRCode library
+import React, { useState, useRef, useEffect } from 'react';
+import { Shield, ChevronDown, Download, Calendar, Trophy, Briefcase, CheckCircle, Upload, X, Loader2, AlertCircle } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 interface VerifyDropdownProps {
   isConnected: boolean;
@@ -11,19 +11,59 @@ interface VerifyDropdownProps {
 const VerifyDropdown: React.FC<VerifyDropdownProps> = ({ 
   isConnected, 
   isVerified, 
-  onVerify 
+  onVerify
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<'age' | 'hackathon-creator' | 'recruiter' | null>(null);
   const [proofFile, setProofFile] = useState<File | null>(null);
   const [isDragOver, setIsDragOver] = useState(false);
   const [mockDob, setMockDob] = useState<string | null>(null);
+  const [mockCompanyInfo, setMockCompanyInfo] = useState<{companyName: string, employeeId: string} | null>(null);
   const [showCorsHelp, setShowCorsHelp] = useState(false);
-  const [qrUrl, setQrUrl] = useState<string | null>(null); // State to store the QR code URL
+  const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCreatingCredential, setIsCreatingCredential] = useState(false);
-  const ISSUER_DID = "did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig"; // Updated issuer DID
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // DIDs and constants
+  const ISSUER_DID = "did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig";
   const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
+
+  // Debug logs
+  console.log('VerifyDropdown Debug:', {
+    isConnected,
+    isVerified,
+    isOpen,
+    selectedType,
+    mockDob,
+    mockCompanyInfo
+  });
+
+  const verificationOptions = [
+    { id: 'age', label: 'Age Verification', icon: <Calendar size={16} /> },
+    { id: 'hackathon-creator', label: 'Hackathon Creator', icon: <Trophy size={16} /> },
+    { id: 'recruiter', label: 'Recruiter Verification', icon: <Briefcase size={16} /> }
+  ];
+
+  const credentialOptions = [
+    { id: 'recruiter', label: 'Recruiter Credentials', icon: <Briefcase size={16} /> },
+    { id: 'age', label: 'Age Verification Certificate', icon: <Calendar size={16} /> },
+    { id: 'hackathon-creator', label: 'Creator Credentials', icon: <Trophy size={16} /> }
+  ];
+
+  const handleGetCredentials = (type: 'age' | 'hackathon-creator' | 'recruiter') => {
+    console.log('Getting credentials for type:', type);
+    
+    // Set the selected type to trigger the document upload flow
+    setSelectedType(type);
+    
+    // Don't close the dropdown - show the upload interface
+  };
+
+  const handleVerificationSelect = (type: 'age' | 'hackathon-creator' | 'recruiter') => {
+    console.log('Verification selected for type:', type);
+    setSelectedType(type);
+    // Don't close the dropdown, show the upload interface
+  };
 
   const handleFileUpload = (file: File) => {
     setProofFile(file);
@@ -48,21 +88,38 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   };
 
   const handleVerify = () => {
-    if (selectedType && proofFile) {
-      setIsLoading(true);
-      
-      // Simulate document reading with 3-second delay
-      setTimeout(() => {
-        setMockDob('01-01-1990'); // Mock DOB
-        setIsLoading(false);
-        setIsOpen(false);
-        setSelectedType(null);
-        setProofFile(null);
-      }, 3000);
-    }
+    if (!selectedType || !proofFile) return;
+
+    setIsLoading(true);
+    
+    // Simulate document processing
+    setTimeout(() => {
+      if (selectedType === 'age') {
+        setMockDob('01-01-1990'); // Mock DOB for age verification
+      } else if (selectedType === 'recruiter') {
+        setMockCompanyInfo({
+          companyName: 'TechCorp Solutions',
+          employeeId: 'EMP001234'
+        });
+      } else {
+        // For hackathon-creator, just set as verified
+        setMockDob('verified');
+      }
+      setIsLoading(false);
+    }, 3000);
   };
 
   const handleConfirm = async () => {
+    if (selectedType === 'age' && mockDob) {
+      await handleAgeCredential();
+    } else if (selectedType === 'recruiter' && mockCompanyInfo) {
+      await handleRecruiterCredential();
+    } else if (selectedType === 'hackathon-creator') {
+      await handleCreatorCredential();
+    }
+  };
+
+  const handleAgeCredential = async () => {
     if (!mockDob) return;
 
     const birthday = mockDob.split('-').reverse().join(''); // Convert to YYYYMMDD format
@@ -77,15 +134,97 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       expiration: 1903357766
     };
 
-    try {
-      console.log("Creating credential with payload:", payload);
+    await createCredential(payload, 'age');
+  };
 
-      // Updated API call with new issuer DID URL encoding
+  // Helper function to convert string to numbers
+  const stringToNumbers = (str: string): { x: string, y: string } => {
+    const cleanStr = str.toLowerCase().replace(/[^a-z0-9]/g, ''); // Remove special chars
+    let xStr = '';
+    let yStr = '';
+    
+    for (let i = 0; i < cleanStr.length; i++) {
+      const char = cleanStr[i];
+      let num: string;
+      
+      if (char >= '0' && char <= '9') {
+        num = char;
+      } else {
+        // Convert a=0, b=1, c=2, etc.
+        num = (char.charCodeAt(0) - 97).toString();
+      }
+      
+      if (i % 2 === 0) {
+        xStr += num;
+      } else {
+        yStr += num;
+      }
+    }
+    
+    // Ensure we have valid numbers
+    const x = xStr || '12345';
+    const y = yStr || '1234';
+    
+    return { x, y };
+  };
+
+  const handleRecruiterCredential = async () => {
+    if (!mockCompanyInfo) return;
+
+    // Convert company name to x (can be same)
+    const companyNumbers = stringToNumbers(mockCompanyInfo.companyName);
+    
+    // Generate unique y value by adding timestamp
+    const timestamp = Date.now().toString().slice(-6); // Last 6 digits of timestamp
+    const employeeNumbers = stringToNumbers(mockCompanyInfo.employeeId);
+    const uniqueY = employeeNumbers.y + timestamp; // Make y unique by appending timestamp
+
+    const payload = {
+      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/auth-v1.json",
+      type: "AuthBJJCredential",
+      credentialSubject: {
+        id: SUBJECT_DID,
+        x: companyNumbers.x, // x can be same (company)
+        y: uniqueY // y must be unique (employee + timestamp)
+      },
+      expiration: 1903357766
+    };
+
+    console.log('Recruiter payload with converted numbers:', {
+      originalCompany: mockCompanyInfo.companyName,
+      originalEmployee: mockCompanyInfo.employeeId,
+      convertedX: companyNumbers.x,
+      originalY: employeeNumbers.y,
+      uniqueY: uniqueY,
+      timestamp: timestamp,
+      payload
+    });
+
+    await createCredential(payload, 'recruiter');
+  };
+
+  const handleCreatorCredential = async () => {
+    const payload = {
+      credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/CreatorCredential-v1.json",
+      type: "CreatorCredential",
+      credentialSubject: {
+        id: SUBJECT_DID,
+        organizationName: "DevCorp Technologies",
+        hackathonsHosted: 12,
+        verificationLevel: "verified"
+      },
+      expiration: 1903357766
+    };
+    await createCredential(payload, 'hackathon-creator');
+  };
+
+  const createCredential = async (payload: any, type: string) => {
+    try {
+      console.log(`Creating ${type} credential with payload:`, payload);
       const encodedIssuerDID = encodeURIComponent(ISSUER_DID);
       const credentialUrl = `/v2/identities/${encodedIssuerDID}/credentials`;
       
       console.log("Credential URL:", credentialUrl);
-
       const response = await fetch(credentialUrl, {
         method: "POST",
         headers: {
@@ -95,8 +234,6 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
         },
         body: JSON.stringify(payload)
       });
-
-      console.log("Credential response status:", response.status);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -110,11 +247,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       // Wait for 2 seconds before fetching the offer
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Updated offer URL with new issuer DID
       const offerUrl = `/v2/identities/${encodedIssuerDID}/credentials/${result.id}/offer?type=universalLink`;
-      
-      console.log("Fetching universal link from:", offerUrl);
-      
       const offerResponse = await fetch(offerUrl, {
         method: "GET",
         headers: {
@@ -123,60 +256,135 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
         }
       });
 
-      console.log("Offer response status:", offerResponse.status);
-
       if (!offerResponse.ok) {
-        const errorText = await offerResponse.text();
-        console.error("Offer fetch failed:", errorText);
         throw new Error(`Offer HTTP error! status: ${offerResponse.status}`);
       }
 
       const offerResult = await offerResponse.json();
-      console.log("Offer result:", offerResult);
-
+      
       if (offerResult.universalLink) {
         handleUniversalLink(offerResult.universalLink);
       } else {
         throw new Error("No universalLink found in response");
       }
-
     } catch (error) {
       console.error("API call failed:", error);
       
-      // Check if it's a network error (likely CORS)
       if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
         setShowCorsHelp(true);
-        alert(`Network error: ${error.message}\n\nThis is likely a CORS issue. Check the CORS help section below for solutions.`);
+        showManualCurlCommands(type);
       } else {
         alert(`API call failed: ${error.message}`);
       }
     }
   };
 
-  const handleManualFlow = () => {
-    const credentialId = prompt("Enter the credential ID from the curl response:");
-    if (credentialId) {
-      handleOfferFlow(credentialId);
+  const showManualCurlCommands = (type: string) => {
+    const encodedIssuerDID = encodeURIComponent(ISSUER_DID);
+    
+    let payload;
+    if (type === 'age' && mockDob) {
+      const birthday = mockDob.split('-').reverse().join('');
+      payload = {
+        credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json",
+        type: "KYCAgeCredential",
+        credentialSubject: {
+          id: SUBJECT_DID,
+          birthday: parseInt(birthday, 10),
+          documentType: 2
+        },
+        expiration: 1903357766
+      };
+    } else if (type === 'recruiter' && mockCompanyInfo) {
+      const companyNumbers = stringToNumbers(mockCompanyInfo.companyName);
+      const employeeNumbers = stringToNumbers(mockCompanyInfo.employeeId);
+      const timestamp = Date.now().toString().slice(-6);
+      const uniqueY = employeeNumbers.y + timestamp;
+      payload = {
+        credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/auth-v1.json",
+        type: "AuthBJJCredential",
+        credentialSubject: {
+          id: SUBJECT_DID,
+          x: companyNumbers.x,
+          y: uniqueY
+        },
+        expiration: 1903357766
+      };
+    } else {
+      payload = {
+        credentialSchema: "https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/CreatorCredential-v1.json",
+        type: "CreatorCredential",
+        credentialSubject: {
+          id: SUBJECT_DID,
+          organizationName: "DevCorp Technologies",
+          hackathonsHosted: 12,
+          verificationLevel: "verified"
+        },
+        expiration: 1903357766
+      };
     }
+
+    const createCurl = `curl -X POST "https://3c52dc2d710d.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials" \\
+  -H "Accept: application/json" \\
+  -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
+  -H "ngrok-skip-browser-warning: true" \\
+  -d '${JSON.stringify(payload)}'`;
+
+    console.log(`=== ${type.toUpperCase()} CREDENTIAL CREATION CURL ===`);
+    console.log(createCurl);
+    
+    if (type === 'recruiter' && mockCompanyInfo) {
+      const companyNumbers = stringToNumbers(mockCompanyInfo.companyName);
+      const employeeNumbers = stringToNumbers(mockCompanyInfo.employeeId);
+      const timestamp = Date.now().toString().slice(-6);
+      const uniqueY = employeeNumbers.y + timestamp;
+      console.log('Conversion details:');
+      console.log(`Company "${mockCompanyInfo.companyName}" -> x: ${companyNumbers.x}`);
+      console.log(`Employee ID "${mockCompanyInfo.employeeId}" -> y: ${employeeNumbers.y} -> unique y: ${uniqueY}`);
+    }
+    console.log("=== END CURL COMMAND ===");
+
+    navigator.clipboard.writeText(createCurl).then(() => {
+      let promptMessage = `Step 1: Create ${type} Credential
+The curl command has been copied to clipboard.
+
+1. Paste and run it in your terminal
+2. Copy the 'id' value from the response
+3. Paste it below:
+Curl command: ${createCurl}`;
+
+      if (type === 'recruiter' && mockCompanyInfo) {
+        const companyNumbers = stringToNumbers(mockCompanyInfo.companyName);
+        const employeeNumbers = stringToNumbers(mockCompanyInfo.employeeId);
+        promptMessage += `
+CONVERSION INFO:
+Company: "${mockCompanyInfo.companyName}" → x: ${companyNumbers.x}
+Employee ID: "${mockCompanyInfo.employeeId}" → y: ${employeeNumbers.y}`;
+      }
+
+      const credentialId = prompt(promptMessage);
+
+      if (credentialId) {
+        handleOfferFlow(credentialId);
+      }
+    }).catch(() => {
+      const credentialId = prompt(`Run this curl command and paste the credential ID here:\n\n${createCurl}`);
+      if (credentialId) {
+        handleOfferFlow(credentialId);
+      }
+    });
   };
 
   const handleOfferFlow = async (credentialId: string) => {
-    // Updated curl command with new issuer DID
     const encodedIssuerDID = encodeURIComponent(ISSUER_DID);
     const offerCurl = `curl -X GET "https://3c52dc2d710d.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials/${credentialId}/offer?type=universalLink" \\
   -H "Accept: application/json" \\
   -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
   -H "ngrok-skip-browser-warning: true"`;
 
-    console.log("=== OFFER CURL COMMAND ===");
-    console.log(offerCurl);
-    console.log("=== END CURL COMMAND ===");
-
     try {
       await navigator.clipboard.writeText(offerCurl);
-      
       const universalLink = prompt(`Step 2: Get Universal Link
-
 The curl command for getting the universal link has been copied to clipboard.
 
 1. Paste and run it in your terminal
@@ -189,7 +397,6 @@ Curl command: ${offerCurl}`);
         handleUniversalLink(universalLink);
       }
     } catch (error) {
-      console.error("Failed to copy to clipboard:", error);
       const universalLink = prompt(`Run this curl command and paste the universalLink here:\n\n${offerCurl}`);
       if (universalLink) {
         handleUniversalLink(universalLink);
@@ -199,8 +406,7 @@ Curl command: ${offerCurl}`);
 
   const handleUniversalLink = async (universalLink: string) => {
     console.log("Using Universal Link:", universalLink);
-    
-    setQrUrl(universalLink); // Set the URL for QR code generation
+    setQrUrl(universalLink);
 
     const confirmResult = window.confirm(
       "Success! Your credential has been created.\n\n" +
@@ -215,7 +421,6 @@ Curl command: ${offerCurl}`);
         await navigator.clipboard.writeText(universalLink);
         alert("Universal link copied to clipboard!");
       } catch (error) {
-        console.error("Failed to copy to clipboard:", error);
         alert(`Universal link: ${universalLink}`);
       }
     }
@@ -224,150 +429,301 @@ Curl command: ${offerCurl}`);
   const handleCloseQR = () => {
     setQrUrl(null);
     setMockDob(null);
+    setMockCompanyInfo(null);
+    setSelectedType(null);
+    setProofFile(null);
+    setIsOpen(false);
   };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsOpen(false);
+        setSelectedType(null);
+        setProofFile(null);
+        setMockDob(null);
+        setMockCompanyInfo(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   if (!isConnected) {
     return (
-      <button className="flex items-center gap-2 bg-gray-600 text-gray-300 px-4 py-2 rounded-lg cursor-not-allowed">
-        <Shield size={18} />
-        <span className="hidden sm:inline">Get Credentials</span>
-      </button>
-    );
-  }
-
-  if (isVerified) {
-    return (
-      <button className="flex items-center gap-2 bg-green-600 text-white px-4 py-2 rounded-lg">
-        <CheckCircle size={18} />
-        <span className="hidden sm:inline">Verified</span>
+      <button
+        disabled
+        className="px-4 py-2 rounded-md bg-gray-600 text-gray-400 cursor-not-allowed flex items-center gap-2 font-semibold"
+      >
+        <Shield size={16} />
+        Verify
       </button>
     );
   }
 
   return (
-    <div className="relative">
+    <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="flex items-center gap-2 bg-gradient-to-r from-orange-600 to-red-600 hover:from-orange-700 hover:to-red-700 text-white px-4 py-2 rounded-lg transition-all duration-300 transform hover:scale-105 futuristic-button hover-glow"
+        className={`px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold transform hover:scale-105 ${
+          isVerified
+            ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white shadow-lg shadow-green-500/25'
+            : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg shadow-orange-500/25'
+        }`}
       >
-        <Shield size={18} />
-        <span className="hidden sm:inline">Verify</span>
+        <Shield size={16} />
+        {isVerified ? 'Get Credentials' : 'Verify'}
+        <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
-
       {isOpen && (
         <div className="absolute top-full right-0 mt-2 w-80 bg-gray-900/95 backdrop-blur-md rounded-xl shadow-2xl border border-gray-700/50 z-50">
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-gray-100">Identity Verification</h3>
-              <button
-                onClick={() => setIsOpen(false)}
-                className="text-gray-400 hover:text-gray-200"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Verification Type
-                </label>
-                <select
-                  value={selectedType || ''}
-                  onChange={(e) => setSelectedType(e.target.value as any)}
-                  className="w-full p-3 border border-gray-700 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-gray-800 text-gray-100"
+          {!isVerified ? (
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-100">
+                  {selectedType ? `${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)} Verification` : 'Identity Verification'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    setSelectedType(null);
+                    setProofFile(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-200"
                 >
-                  <option value="">Select type...</option>
-                  <option value="age">Age Verification</option>
-                  <option value="hackathon-creator">Hackathon Creator</option>
-                  <option value="recruiter">Recruiter</option>
-                </select>
+                  <X size={20} />
+                </button>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-200 mb-2">
-                  Upload Proof Document
-                </label>
-                <div
-                  onDragOver={handleDragOver}
-                  onDragLeave={handleDragLeave}
-                  onDrop={handleDrop}
-                  className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                    isDragOver 
-                      ? 'border-purple-400 bg-purple-900/30' 
-                      : 'border-gray-700 hover:border-purple-400'
-                  }`}
-                >
-                  <Upload className="mx-auto h-12 w-12 text-gray-400 mb-2" />
-                  <p className="text-sm text-gray-300 mb-2">
-                    Drag and drop your document here, or
-                  </p>
-                  <input
-                    type="file"
-                    onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                    className="hidden"
-                    id="file-upload"
-                    accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                  />
-                  <label
-                    htmlFor="file-upload"
-                    className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors"
-                  >
-                    Choose File
-                  </label>
-                  {proofFile && (
-                    <p className="mt-2 text-sm text-green-400">
-                      ✓ {proofFile.name}
-                    </p>
-                  )}
+              {!selectedType ? (
+                <div className="space-y-2">
+                  <div className="text-sm font-semibold text-gray-300 mb-3">Choose Verification Type</div>
+                  {verificationOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => handleVerificationSelect(option.id as any)}
+                      className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3 text-gray-100 rounded-lg"
+                    >
+                      {option.icon}
+                      <span className="font-medium">{option.label}</span>
+                    </button>
+                  ))}
                 </div>
-              </div>
-
-              <button
-                onClick={handleVerify}
-                disabled={!selectedType || !proofFile || isLoading}
-                className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isLoading ? (
-                  <>
-                    <Loader2 className="animate-spin" size={20} />
-                    Reading Document...
-                  </>
-                ) : (
-                  'Verify Identity'
-                )}
-              </button>
-
-              {/* Loading overlay */}
-              {isLoading && (
-                <div className="absolute inset-0 bg-gray-900/80 backdrop-blur-sm rounded-xl flex items-center justify-center z-10">
-                  <div className="text-center">
-                    <Loader2 className="animate-spin mx-auto mb-3 text-purple-400" size={32} />
-                    <p className="text-gray-200 font-medium">Reading Document...</p>
-                    <p className="text-gray-400 text-sm mt-1">Please wait while we process your document</p>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      Upload Proof Document
+                    </label>
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                        isDragOver 
+                          ? 'border-purple-400 bg-purple-900/30' 
+                          : 'border-gray-700 hover:border-purple-400'
+                      }`}
+                    >
+                      <Upload className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-300 mb-2">
+                        Drag and drop your document here, or
+                      </p>
+                      <input
+                        type="file"
+                        id="file-upload"
+                        onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      />
+                      <label
+                        htmlFor="file-upload"
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors"
+                      >
+                        Choose File
+                      </label>
+                      {proofFile && (
+                        <p className="mt-2 text-sm text-green-400">
+                          ✓ {proofFile.name}
+                        </p>
+                      )}
+                    </div>
                   </div>
+                  <button
+                    onClick={handleVerify}
+                    disabled={!proofFile || isLoading}
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={20} />
+                        Processing Document...
+                      </>
+                    ) : (
+                      'Verify Identity'
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedType(null);
+                      setProofFile(null);
+                    }}
+                    className="w-full text-gray-400 hover:text-gray-200 py-2 text-sm"
+                  >
+                    ← Back to verification types
+                  </button>
                 </div>
               )}
             </div>
-          </div>
+          ) : (
+            <div className="p-6">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg font-semibold text-gray-100">
+                  {selectedType ? `Get ${selectedType.charAt(0).toUpperCase() + selectedType.slice(1)} Credential` : 'Get Credentials'}
+                </h3>
+                <button
+                  onClick={() => {
+                    setIsOpen(false);
+                    setSelectedType(null);
+                    setProofFile(null);
+                  }}
+                  className="text-gray-400 hover:text-gray-200"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+              {!selectedType ? (
+                <div className="space-y-2">
+                  {credentialOptions.map((option) => (
+                    <button
+                      key={option.id}
+                      onClick={() => handleGetCredentials(option.id as 'age' | 'hackathon-creator' | 'recruiter')}
+                      className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3 text-gray-100 rounded-lg"
+                    >
+                      <Download size={16} />
+                      <span className="font-medium">{option.label}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-200 mb-2">
+                      Upload Document to Generate Credential
+                    </label>
+                    <div
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
+                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                        isDragOver 
+                          ? 'border-purple-400 bg-purple-900/30' 
+                          : 'border-gray-700 hover:border-purple-400'
+                      }`}
+                    >
+                      <Upload className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                      <p className="text-sm text-gray-300 mb-2">
+                        Drag and drop your document here, or
+                      </p>
+                      <input
+                        type="file"
+                        id="file-upload-credential"
+                        onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                        className="hidden"
+                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                      />
+                      <label
+                        htmlFor="file-upload-credential"
+                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors"
+                      >
+                        Choose File
+                      </label>
+                      {proofFile && (
+                        <p className="mt-2 text-sm text-green-400">
+                          ✓ {proofFile.name}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleVerify}
+                    disabled={!proofFile || isLoading}
+                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  >
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" size={20} />
+                        Processing Document...
+                      </>
+                    ) : (
+                      'Process Document'
+                    )}
+                  </button>
+                  <button
+                    onClick={() => {
+                      setSelectedType(null);
+                      setProofFile(null);
+                    }}
+                    className="w-full text-gray-400 hover:text-gray-200 py-2 text-sm"
+                  >
+                    ← Back to credential types
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
-
-      {mockDob && (
-        <div className="mt-4 p-6 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700">
-          <p className="text-gray-200 text-lg font-semibold mb-4">Date of Birth: {mockDob}</p>
+      {/* Confirmation UI for extracted data */}
+      {(mockDob || mockCompanyInfo) && !qrUrl && (
+        <div className="absolute top-full right-0 mt-2 w-80 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700 z-50 p-6">
+          <h3 className="text-gray-200 text-lg font-semibold mb-4">Verification Complete</h3>
+          
+          {mockDob && selectedType === 'age' && (
+            <p className="text-gray-200 mb-4">Date of Birth: {mockDob}</p>
+          )}
+          
+          {mockCompanyInfo && selectedType === 'recruiter' && (
+            <div className="text-gray-200 mb-4">
+              <p>Company: {mockCompanyInfo.companyName}</p>
+              <p>Employee ID: {mockCompanyInfo.employeeId}</p>
+              <div className="mt-2 p-2 bg-gray-700 rounded text-xs">
+                <p>Will convert to:</p>
+                <p>x: {stringToNumbers(mockCompanyInfo.companyName).x}</p>
+                <p>y: {stringToNumbers(mockCompanyInfo.employeeId).y + Date.now().toString().slice(-6)} (unique)</p>
+              </div>
+            </div>
+          )}
+          
+          {selectedType === 'hackathon-creator' && (
+            <p className="text-gray-200 mb-4">Creator status verified</p>
+          )}
+          
           <button
             onClick={handleConfirm}
-            className="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 transform hover:scale-105"
+            className="px-6 py-3 bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-lg hover:from-green-600 hover:to-teal-600 transition-all duration-300 transform hover:scale-105 mr-3"
           >
             Confirm & Get Credential
           </button>
+          
+          <button
+            onClick={() => {
+              setMockDob(null);
+              setMockCompanyInfo(null);
+              setSelectedType(null);
+              setProofFile(null);
+            }}
+            className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-lg transition-colors"
+          >
+            Cancel
+          </button>
         </div>
       )}
-
       {qrUrl && (
-        <div className="mt-4 p-6 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700">
-          <h3 className="text-gray-200 text-lg font-semibold mb-4">Scan using your phone</h3>
+        <div className="absolute top-full right-0 mt-2 w-80 bg-gray-800 rounded-lg text-center shadow-lg border border-gray-700 z-50 p-6">
+          <h3 className="text-gray-200 text-lg font-semibold mb-4">Scan with your phone</h3>
           <div className="flex justify-center mb-4">
             <QRCodeSVG value={qrUrl} size={200} className="rounded-lg" />
           </div>
@@ -380,36 +736,24 @@ Curl command: ${offerCurl}`);
           </button>
         </div>
       )}
-
       {showCorsHelp && (
-        <div className="mt-4 p-6 bg-yellow-900/50 rounded-lg border border-yellow-600/50">
+        <div className="absolute top-full right-0 mt-2 w-96 bg-yellow-900/50 rounded-lg border border-yellow-600/50 p-6 z-50">
           <div className="flex items-start gap-3">
             <AlertCircle className="text-yellow-400 mt-1 flex-shrink-0" size={20} />
-            <div className="text-sm text-yellow-100">
+            <div>
               <h4 className="font-semibold mb-2">CORS Solutions:</h4>
               <ol className="list-decimal list-inside space-y-1 mb-3">
                 <li>Install "CORS Unblock" browser extension</li>
+                <li>Run Chrome with --disable-web-security flag (dev only)</li>
                 <li>Add CORS headers to your API server</li>
                 <li>Use ngrok with authentication token (paid plan)</li>
-                <li>Run Chrome with --disable-web-security flag (dev only)</li>
               </ol>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setShowCorsHelp(false)}
-                  className="text-yellow-400 hover:text-yellow-300 underline"
-                >
-                  Dismiss
-                </button>
-                <button
-                  onClick={() => {
-                    setShowCorsHelp(false);
-                    handleManualFlow();
-                  }}
-                  className="px-3 py-1 bg-yellow-600 hover:bg-yellow-700 text-white rounded transition-colors"
-                >
-                  Use Manual Process
-                </button>
-              </div>
+              <button
+                onClick={() => setShowCorsHelp(false)}
+                className="text-yellow-400 hover:text-yellow-300 underline"
+              >
+                Dismiss
+              </button>
             </div>
           </div>
         </div>

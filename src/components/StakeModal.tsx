@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Coins, AlertTriangle, CheckCircle, ExternalLink, Loader, Shield } from 'lucide-react';
 import { useStakingContract } from '../hooks/useStakingContract';
-import { useUserActivity } from '../contexts/UserActivityContext';
+import { csvLogger } from '../utils/csvLogger';
+import { stakingRecords } from '../utils/stakingRecords';
 
 interface StakeModalProps {
   isOpen: boolean;
@@ -24,8 +25,11 @@ const StakeModal: React.FC<StakeModalProps> = ({
   const [showSuccess, setShowSuccess] = useState(false);
   const [needsApproval, setNeedsApproval] = useState(false);
   const [tokenLoadError, setTokenLoadError] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
+  const [isNetworkIssue, setIsNetworkIssue] = useState(false);
+  const [isInvalidContract, setIsInvalidContract] = useState(false);
   const { stake, approveToken, loadTokenInfo, stakingState, clearState, contractAddress } = useStakingContract();
-  const { addStake, updateStakeStatus } = useUserActivity();
 
   useEffect(() => {
     if (isOpen) {
@@ -34,11 +38,21 @@ const StakeModal: React.FC<StakeModalProps> = ({
       setShowSuccess(false);
       setNeedsApproval(false);
       setTokenLoadError(null);
-      
+      setIsNetworkIssue(false);
+      setIsInvalidContract(false);
+
       // Load token info when modal opens
       loadTokenInfo().catch((error) => {
         console.error('Failed to load token info:', error);
-        setTokenLoadError(error.message || 'Failed to load token information');
+        const errorMsg = error.message || 'Failed to load token information';
+        setTokenLoadError(errorMsg);
+
+        // Check error type to set appropriate flags
+        if (errorMsg.includes('Network') || errorMsg.includes('node synchronization') || errorMsg.includes('RPC endpoint')) {
+          setIsNetworkIssue(true);
+        } else if (errorMsg.includes('not implement') || errorMsg.includes('invalid') || errorMsg.includes('does not appear to be')) {
+          setIsInvalidContract(true);
+        }
       });
     }
   }, [isOpen, clearState, loadTokenInfo]);
@@ -58,7 +72,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
     }
 
     const result = await approveToken(stakeAmount);
-    
+
     if (result.success) {
       setNeedsApproval(false);
     }
@@ -75,7 +89,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
       return;
     }
 
-    // Get user address for tracking
+    // Get user address for logging
     let userAddress = 'Unknown';
     try {
       const provider = await (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
@@ -87,52 +101,51 @@ const StakeModal: React.FC<StakeModalProps> = ({
       console.error('Error getting user address:', error);
     }
 
-    // Add stake to activity tracker as pending
-    const stakeActivity = {
-      poolId,
-      poolName,
-      amount: stakeAmount,
-      tokenSymbol: stakingState.tokenInfo?.symbol || 'TT',
-      apy,
-      txHash: '', // Will be updated when we get the transaction hash
-      status: 'pending' as const,
-      userAddress
-    };
-
-    addStake(stakeActivity);
-
     const result = await stake(stakeAmount);
-    
-    if (result.success && result.txHash) {
-      // Update the stake activity with transaction hash and confirmed status
-      const activities = JSON.parse(localStorage.getItem('user_staking_activities') || '{"stakes":[]}');
-      const latestStake = activities.stakes[activities.stakes.length - 1];
-      
-      if (latestStake) {
-        updateStakeStatus(latestStake.id, 'confirmed');
-        // Update txHash
-        const updatedActivities = {
-          ...activities,
-          stakes: activities.stakes.map((s: any) => 
-            s.id === latestStake.id ? { ...s, txHash: result.txHash } : s
-          )
-        };
-        localStorage.setItem('user_staking_activities', JSON.stringify(updatedActivities));
-      }
+
+    if (result.success) {
+      // Log the stake to CSV
+      csvLogger.addStakeRecord({
+        companyName: poolName.split(' ')[0] || 'Unknown',
+        poolName: poolName,
+        amount: parseFloat(stakeAmount),
+        tokenSymbol: stakingState.tokenInfo?.symbol || 'TT',
+        apy: apy,
+        userAddress: userAddress,
+        transactionHash: result.txHash || ''
+      });
+
+      // Also record in our staking balance tracker
+      stakingRecords.recordStake(
+        poolName.split(' ')[0] || 'Unknown',
+        parseFloat(stakeAmount),
+        stakingState.tokenInfo?.symbol || 'TT'
+      );
 
       setShowSuccess(true);
       setTimeout(() => {
         onClose();
       }, 3000);
     } else {
-      // Update status to failed
-      const activities = JSON.parse(localStorage.getItem('user_staking_activities') || '{"stakes":[]}');
-      const latestStake = activities.stakes[activities.stakes.length - 1];
-      
-      if (latestStake) {
-        updateStakeStatus(latestStake.id, 'failed');
+      // Handle specific error cases
+      if (result.error?.includes('Network') || result.error?.includes('RPC')) {
+        setIsRetrying(true);
+        setRetryCount(prev => prev + 1);
+
+        // Auto-retry after 3 seconds for network errors
+        setTimeout(() => {
+          setIsRetrying(false);
+          if (retryCount < 2) { // Max 3 attempts
+            handleStake();
+          }
+        }, 3000);
       }
     }
+  };
+
+  const handleRetry = () => {
+    setRetryCount(0);
+    handleStake();
   };
 
   const getExplorerUrl = (txHash: string) => {
@@ -183,9 +196,6 @@ const StakeModal: React.FC<StakeModalProps> = ({
                 <p className="text-gray-600 text-sm mb-4">
                   You have successfully staked {stakeAmount} {tokenSymbol} in {poolName}
                 </p>
-                <p className="text-blue-600 text-sm mb-4">
-                  ✨ Check "Your Activity" section below to track this stake
-                </p>
                 {stakingState.txHash && (
                   <a
                     href={getExplorerUrl(stakingState.txHash)}
@@ -200,8 +210,44 @@ const StakeModal: React.FC<StakeModalProps> = ({
             </div>
           ) : (
             <div className="space-y-6">
-              {/* Token Configuration Error */}
-              {(tokenLoadError || !isTokenConfigured) && (
+              {/* Network Issue Warning */}
+              {isNetworkIssue && (
+                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="text-orange-600 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="text-sm text-orange-800">
+                      <p className="font-medium mb-2">Network Connectivity Issues</p>
+                      <p className="mb-2">The app is experiencing network connectivity problems. Using mock data for testing purposes.</p>
+                      <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
+                        <p className="text-xs text-blue-800">
+                          <strong>Troubleshooting:</strong> Try switching to a different network in MetaMask, or use a different RPC endpoint for your current network.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Contract Implementation Error */}
+              {isInvalidContract && !isNetworkIssue && (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="text-yellow-600 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="text-sm text-yellow-800">
+                      <p className="font-medium mb-2">Invalid Token Contract</p>
+                      <p className="mb-2">The token contract doesn't implement the ERC20 standard correctly. Using mock data for testing.</p>
+                      <div className="bg-gray-50 border border-gray-200 rounded p-2 mt-2">
+                        <p className="text-xs text-gray-800">
+                          <strong>For developers:</strong> Please verify the token contract's implementation and ensure it follows the ERC20 standard.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Token Configuration Error - Only show if not a network or contract issue */}
+              {(tokenLoadError || !isTokenConfigured) && !isNetworkIssue && !isInvalidContract && (
                 <div className="bg-red-50 border border-red-200 rounded-lg p-4">
                   <div className="flex items-start gap-2">
                     <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={20} />
@@ -234,30 +280,24 @@ const StakeModal: React.FC<StakeModalProps> = ({
                     <span className="text-gray-600">Token:</span>
                     <span className="font-medium">{tokenName} ({tokenSymbol})</span>
                   </div>
-                  {isTokenConfigured && (
+                  {(isTokenConfigured || isNetworkIssue || isInvalidContract) && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Total Staked:</span>
                       <span className="font-medium text-blue-600">{parseFloat(totalStaked).toFixed(2)} {tokenSymbol}</span>
                     </div>
                   )}
-                </div>
-              </div>
-
-              {/* Activity Tracking Notice */}
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                <div className="flex items-start gap-2">
-                  <Coins className="text-blue-600 mt-0.5" size={16} />
-                  <div className="text-sm text-blue-800">
-                    <p className="font-medium mb-1">Activity Tracking</p>
-                    <p>Your stake will appear in "Your Activity" section after confirmation</p>
-                  </div>
+                  {(isNetworkIssue || isInvalidContract) && (
+                    <div className="text-xs text-orange-600 mt-2">
+                      * Using mock data due to network or contract issues
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* User Balance Info */}
-              {stakingState.tokenInfo && isTokenConfigured && (
+              {stakingState.tokenInfo && (isTokenConfigured || isNetworkIssue || isInvalidContract) && (
                 <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-800 mb-2">Your Wallet</h4>
+                  <h4 className="font-medium text-blue-800 mb-2">Your Wallet {(isNetworkIssue || isInvalidContract) && '(Mock Data)'}</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
                       <span className="text-blue-700">Balance:</span>
@@ -283,14 +323,17 @@ const StakeModal: React.FC<StakeModalProps> = ({
                     onChange={(e) => setStakeAmount(e.target.value)}
                     placeholder="Enter amount to stake"
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg"
-                    disabled={stakingState.isLoading || !isTokenConfigured}
+                    disabled={stakingState.isLoading || (!isTokenConfigured && !isNetworkIssue && !isInvalidContract)}
                     step="0.001"
                     min="0"
                     max={userBalance}
                   />
                 </label>
                 <p className="text-xs text-gray-500">
-                  {isTokenConfigured ? `Available: ${parseFloat(userBalance).toFixed(4)} ${tokenSymbol}` : 'Token contract not configured'}
+                  {(isTokenConfigured || isNetworkIssue || isInvalidContract) 
+                    ? `Available: ${parseFloat(userBalance).toFixed(4)} ${tokenSymbol}${(isNetworkIssue || isInvalidContract) ? ' (mock)' : ''}` 
+                    : 'Token contract not configured'
+                  }
                 </p>
               </div>
 
@@ -307,10 +350,57 @@ const StakeModal: React.FC<StakeModalProps> = ({
                 </div>
               )}
 
-              {/* Error Display */}
+              {/* Enhanced Error Display */}
               {stakingState.error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                  <p className="text-red-800 text-sm">{stakingState.error}</p>
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="flex-1">
+                      <p className="text-red-800 text-sm font-medium mb-2">Transaction Failed</p>
+                      <p className="text-red-700 text-sm mb-3">{stakingState.error}</p>
+                      
+                      {/* Retry section for network errors */}
+                      {(stakingState.error.includes('Network') || stakingState.error.includes('RPC')) && (
+                        <div className="space-y-2">
+                          {isRetrying ? (
+                            <div className="flex items-center gap-2 text-orange-600 text-sm">
+                              <Loader className="animate-spin" size={14} />
+                              <span>Retrying in 3 seconds... (Attempt {retryCount + 1}/3)</span>
+                            </div>
+                          ) : retryCount < 3 ? (
+                            <button
+                              onClick={handleRetry}
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                            >
+                              Retry Transaction
+                            </button>
+                          ) : null}
+                          
+                          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                            <p className="font-medium mb-1">Troubleshooting Tips:</p>
+                            <ul className="space-y-1">
+                              <li>• Check your internet connection</li>
+                              <li>• Try switching to a different RPC endpoint</li>
+                              <li>• Increase gas price in your wallet</li>
+                              <li>• Wait for network congestion to decrease</li>
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Gas-related error tips */}
+                      {stakingState.error.includes('gas') && (
+                        <div className="text-xs text-gray-600 bg-yellow-50 p-2 rounded border border-yellow-200">
+                          <p className="font-medium text-yellow-800 mb-1">Gas Issue Tips:</p>
+                          <ul className="space-y-1 text-yellow-700">
+                            <li>• Ensure you have enough ETH for gas fees</li>
+                            <li>• Try increasing gas limit in your wallet</li>
+                            <li>• Wait for lower network congestion</li>
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -340,19 +430,19 @@ const StakeModal: React.FC<StakeModalProps> = ({
             <button
               onClick={onClose}
               className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
-              disabled={stakingState.isLoading}
+              disabled={stakingState.isLoading || isRetrying}
             >
               Cancel
             </button>
             
-            {!isTokenConfigured ? (
+            {(!isTokenConfigured && !isNetworkIssue && !isInvalidContract) ? (
               <button
                 disabled={true}
                 className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-lg cursor-not-allowed font-medium"
               >
                 Contract Not Ready
               </button>
-            ) : needsApproval ? (
+            ) : needsApproval && !isNetworkIssue && !isInvalidContract ? (
               <button
                 onClick={handleApprove}
                 disabled={stakingState.isLoading || !stakeAmount || parseFloat(stakeAmount) <= 0}
@@ -370,16 +460,24 @@ const StakeModal: React.FC<StakeModalProps> = ({
             ) : (
               <button
                 onClick={handleStake}
-                disabled={stakingState.isLoading || !stakeAmount || parseFloat(stakeAmount) <= 0 || parseFloat(stakeAmount) > parseFloat(userBalance)}
+                disabled={
+                  stakingState.isLoading || 
+                  isRetrying || 
+                  !stakeAmount || 
+                  parseFloat(stakeAmount) <= 0 || 
+                  (parseFloat(stakeAmount) > parseFloat(userBalance) && !isNetworkIssue && !isInvalidContract)
+                }
                 className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
               >
-                {stakingState.isLoading ? (
+                {stakingState.isLoading || isRetrying ? (
                   <>
                     <Loader className="animate-spin" size={16} />
-                    Staking...
+                    {isRetrying ? `Retrying (${retryCount}/3)...` : (isNetworkIssue || isInvalidContract ? 'Simulating...' : 'Staking...')}
                   </>
                 ) : (
-                  'Stake Now'
+                  <>
+                    {isNetworkIssue || isInvalidContract ? 'Test Interface' : 'Stake Now'}
+                  </>
                 )}
               </button>
             )}

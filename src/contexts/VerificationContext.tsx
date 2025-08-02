@@ -19,10 +19,11 @@ interface VerificationProviderProps {
 }
 
 export const VerificationProvider: React.FC<VerificationProviderProps> = ({ children }) => {
+  // Make sure the initial state doesn't auto-trigger verification
   const [verificationState, setVerificationState] = useState<VerificationState>({
     isVerified: false,
-    verificationDate: null,
-    verificationType: null
+    verificationType: null,
+    verificationDate: null
   });
 
   // Load verification state from sessionStorage on component mount
