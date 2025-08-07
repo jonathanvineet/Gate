@@ -459,7 +459,7 @@ Curl command: ${offerCurl}`);
         className="px-4 py-2 rounded-md bg-gray-600 text-gray-400 cursor-not-allowed flex items-center gap-2 font-semibold"
       >
         <Shield size={16} />
-        Verify
+        Credentials
       </button>
     );
   }
@@ -562,7 +562,7 @@ Curl command: ${offerCurl}`);
                         Processing Document...
                       </>
                     ) : (
-                      'Verify Identity'
+                      'Get Credential'
                     )}
                   </button>
                   <button

@@ -17,6 +17,7 @@ class RateLimiter {
     const now = Date.now();
     const windowStart = now - this.windowMs;
     
+    
     // Clean old entries
     if (!this.requests.has(identifier)) {
       this.requests.set(identifier, []);
@@ -70,6 +71,7 @@ const port = 8000;
 
 // Add support for JSON body parsing
 app.use(express.json());
+app.use('/v2/agent', express.text());
 
 // Serve static files at /static path
 app.use('/static', express.static(path.join(__dirname, "../static")));
@@ -143,18 +145,27 @@ app.options('/v2/agent', (req, res) => {
   res.status(204).end();
 });
 
-// Improve existing agent endpoint
-app.all('/v2/agent', (req, res) => {
-  console.log('Agent request received:', req.method);
-  console.log('Agent request headers:', req.headers);
-  console.log('Agent request body:', req.body);
-  
-  // Do not set CORS headers manually here
-  return res.status(200).json({
-    revoked: false,
-    statusCode: 200,
-    message: "Credential is valid and not revoked"
-  });
+const ISSUER_URL = 'https://3c52dc2d710d.ngrok-free.app'; // your issuer ngrok URL (updated)
+
+// Proxy agent requests to the issuer
+app.all('/v2/agent', async (req, res) => {
+  try {
+    console.log('Proxying agent request to issuer:', req.body);
+    const issuerResponse = await fetch(`${ISSUER_URL}/v2/agent`, {
+      method: req.method,
+      headers: {
+        'Content-Type': 'text/plain',
+      },
+      body: req.body,
+    });
+    console.log('Issuer response status:', issuerResponse.status);
+    const data = await issuerResponse.json();
+    console.log('Issuer response data:', data);
+    res.status(issuerResponse.status).json(data);
+  } catch (error) {
+    console.error('Error proxying to issuer:', error);
+    res.status(500).json({ error: 'Failed to proxy request to issuer' });
+  }
 });
 
 // Add this new endpoint for QR data that the verification modal is trying to access
@@ -221,7 +232,7 @@ async function getAuthRequest(req, res) {
     const request = auth.createAuthorizationRequest("Age Verification Request", audience, uri);
 
     // Set agent URL to your own server instance
-    request.agentUrl = `${hostUrl}/v2/agent`;
+    request.agentUrl = `${ISSUER_URL}/v2/agent`;
     
     // Add request for a specific proof with corrected context
     const proofRequest = {
@@ -279,7 +290,8 @@ app.get("/api/verification-status/:sessionId", (req, res) => {
     completed: !!result,
     success: result?.success || false,
     message: result?.message || '',
-    timestamp: result?.timestamp || null
+    timestamp: result?.timestamp || null,
+    credentialDetails: result?.response?.verifications[0]?.proof?.credential?.credentialSubject || null
   });
 });
 
@@ -549,7 +561,7 @@ async function generateQRData(req, res) {
     const request = auth.createAuthorizationRequest("Age Verification", audience, uri);
 
     // Set agent URL
-    request.agentUrl = `${hostUrl}/v2/agent`;
+    request.agentUrl = `${ISSUER_URL}/v2/agent`;
 
     // Enhanced proof request with proper context and query structure
     const proofRequest = {
