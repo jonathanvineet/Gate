@@ -19,25 +19,25 @@ const MainContent: React.FC<MainContentProps> = ({
   const [activeTab, setActiveTab] = useState<'pools' | 'activity'>('pools');
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
       {/* Tab Navigation */}
-      <div className="flex items-center gap-1 mb-8 bg-white/5 backdrop-blur-sm rounded-xl p-1">
+    <div className="flex items-center gap-1 mb-6 bg-black rounded-xl p-1 border border-gray-800">
         <button
           onClick={() => setActiveTab('pools')}
-          className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+      className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
             activeTab === 'pools'
-              ? 'bg-white/10 text-white shadow-lg'
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
+        ? 'bg-black text-white shadow-lg tab-active accent-gradient-text'
+              : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-black'
           }`}
         >
           Pools & Opportunities
         </button>
         <button
           onClick={() => setActiveTab('activity')}
-          className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+      className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
             activeTab === 'activity'
-              ? 'bg-white/10 text-white shadow-lg'
-              : 'text-gray-400 hover:text-white hover:bg-white/5'
+        ? 'bg-black text-white shadow-lg tab-active accent-gradient-text'
+              : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-black'
           }`}
         >
           Your Activity
@@ -47,10 +47,25 @@ const MainContent: React.FC<MainContentProps> = ({
       {/* Tab Content */}
       {activeTab === 'pools' ? (
         <>
-          <TopPicks />
-          <StakePools onJoinStakePool={onJoinStakePool} />
-          <Hackathons onJoinHackathon={onJoinHackathon} />
-          <Jobs onApplyJob={onApplyJob} />
+          <section className="glow-section mb-8">
+            <div className="snap-x snap-mandatory overflow-x-auto pb-2 -mx-1 px-1">
+              <TopPicks onJoinHackathon={onJoinHackathon} onApplyJob={onApplyJob} onJoinStakePool={onJoinStakePool} />
+            </div>
+          </section>
+
+          <section className="quiet-section mb-8">
+            <StakePools onJoinStakePool={onJoinStakePool} />
+          </section>
+
+          <section className="glow-section mb-8">
+            <div className="snap-x snap-mandatory overflow-x-auto pb-2 -mx-1 px-1">
+              <Hackathons onJoinHackathon={onJoinHackathon} />
+            </div>
+          </section>
+
+          <section className="glow-section">
+            <Jobs onApplyJob={onApplyJob} />
+          </section>
         </>
       ) : (
         <ActivityDashboard />

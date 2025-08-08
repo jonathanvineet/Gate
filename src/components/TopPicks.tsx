@@ -1,12 +1,12 @@
 import React from 'react';
-import { Star, TrendingUp, Coins, Trophy, Users, Calendar, DollarSign, MapPin, Clock, Shield } from 'lucide-react';
+import { Star, TrendingUp } from 'lucide-react';
 import ExpandableCard from './ExpandableCard';
 import { topPicks, stakePools, hackathons, jobs } from '../data/mockData';
 
 interface TopPicksProps {
-  onJoinStakePool: (poolId: string) => void;
-  onJoinHackathon: (hackathonId: string) => void;
-  onApplyJob: (jobId: string) => void;
+  onJoinStakePool?: (poolId: string) => void;
+  onJoinHackathon?: (hackathonId: string) => void;
+  onApplyJob?: (jobId: string) => void;
 }
 
 const TopPicks: React.FC<TopPicksProps> = ({
@@ -16,55 +16,11 @@ const TopPicks: React.FC<TopPicksProps> = ({
 }) => {
   const getTypeIcon = (type: string) => {
     switch (type) {
-      case 'stake-pool': return '🪙';
-      case 'hackathon': return '⚡';
-      case 'job': return '💼';
-      default: return '⭐';
+      case 'stake-pool': return '◼';
+      case 'hackathon': return '▢';
+      case 'job': return '▪';
+      default: return '■';
     }
-  };
-
-  const getTypeColor = (type: string) => {
-    switch (type) {
-      case 'stake-pool': return 'from-purple-600 to-blue-600';
-      case 'hackathon': return 'from-blue-600 to-cyan-600';
-      case 'job': return 'from-green-600 to-teal-600';
-      default: return 'from-gray-600 to-gray-700';
-    }
-  };
-
-  const getRiskColor = (risk: string) => {
-    switch (risk) {
-      case 'Low': return 'text-green-600 bg-green-100';
-      case 'Medium': return 'text-yellow-600 bg-yellow-100';
-      case 'High': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getDifficultyColor = (difficulty: string) => {
-    switch (difficulty) {
-      case 'Beginner': return 'text-green-600 bg-green-100';
-      case 'Intermediate': return 'text-yellow-600 bg-yellow-100';
-      case 'Advanced': return 'text-red-600 bg-red-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const getTypeColor2 = (type: string) => {
-    switch (type) {
-      case 'Full-time': return 'text-blue-600 bg-blue-100';
-      case 'Part-time': return 'text-green-600 bg-green-100';
-      case 'Contract': return 'text-purple-600 bg-purple-100';
-      default: return 'text-gray-600 bg-gray-100';
-    }
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric'
-    });
   };
 
   const getFullItem = (pick: any) => {
@@ -82,137 +38,94 @@ const TopPicks: React.FC<TopPicksProps> = ({
 
   const getExpandedContent = (pick: any, item: any) => {
     if (!item) return <div>Item not found</div>;
-
-    switch (pick.type) {
-      case 'stake-pool':
-        return (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-bold text-gray-100 mb-2">{item.name}</h3>
-              <p className="text-gray-300">{item.description}</p>
+    if (pick.type === 'stake-pool') {
+      return (
+        <div className="space-y-4 text-white">
+          <div>
+            <h3 className="text-xl font-bold mb-2 futuristic-text">{item.name}</h3>
+            <p className="text-gray-300">{item.description}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 p-4 rounded-lg accent-ring">
+              <div className="text-sm text-gray-300">Annual Percentage Yield</div>
+              <div className="text-2xl font-bold">{item.apy}</div>
             </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Annual Percentage Yield</div>
-                <div className="text-2xl font-bold text-green-600">{item.apy}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Total Value Locked</div>
-                <div className="text-2xl font-bold text-blue-600">{item.tvl}</div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div>
-                <span className="text-sm text-gray-400">Risk Level: </span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getRiskColor(item.risk)}`}>
-                  {item.risk}
-                </span>
-              </div>
-              <div className="text-sm text-gray-400">
-                Min. Stake: <span className="font-medium text-gray-200">{item.minStake}</span>
-              </div>
+            <div className="bg-white/5 p-4 rounded-lg accent-ring">
+              <div className="text-sm text-gray-300">Total Value Locked</div>
+              <div className="text-2xl font-bold">{item.tvl}</div>
             </div>
           </div>
-        );
-
-      case 'hackathon':
-        return (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-bold text-gray-100 mb-2">{item.name}</h3>
-              <p className="text-gray-300">{item.description}</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Prize Pool</div>
-                <div className="text-2xl font-bold text-green-600">{item.prize}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Participants</div>
-                <div className="text-2xl font-bold text-blue-600">{item.participants.toLocaleString()}</div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div>
-                <span className="text-sm text-gray-400">Difficulty: </span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getDifficultyColor(item.difficulty)}`}>
-                  {item.difficulty}
-                </span>
-              </div>
-              <div className="text-sm text-gray-400">
-                Deadline: <span className="font-medium text-gray-200">{formatDate(item.deadline)}</span>
-              </div>
-            </div>
-
-            <div>
-              <div className="text-sm text-gray-400 mb-2">Tags:</div>
-              <div className="flex flex-wrap gap-2">
-                {item.tags.map((tag: string, index: number) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-blue-100 text-blue-600 rounded-full text-sm"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
-            </div>
+          <div className="flex justify-between items-center">
+            <div className="text-sm text-gray-300">Risk Level: <span className="px-2 py-1 rounded-full text-xs font-medium bg-white/10 text-white accent-ring">{item.risk}</span></div>
+            <div className="text-sm text-gray-300">Min. Stake: <span className="font-medium text-white">{item.minStake}</span></div>
           </div>
-        );
-
-      case 'job':
-        return (
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-xl font-bold text-gray-100 mb-1">{item.title}</h3>
-              <p className="text-lg text-gray-300 mb-2">{item.company}</p>
-              <p className="text-gray-300">{item.description}</p>
-            </div>
-            
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Salary Range</div>
-                <div className="text-lg font-bold text-green-600">{item.salary}</div>
-              </div>
-              <div className="bg-gray-800 p-4 rounded-lg">
-                <div className="text-sm text-gray-400">Experience Required</div>
-                <div className="text-lg font-bold text-blue-600">{item.experience}</div>
-              </div>
-            </div>
-
-            <div className="flex justify-between items-center">
-              <div>
-                <span className="text-sm text-gray-400">Type: </span>
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeColor2(item.type)}`}>
-                  {item.type}
-                </span>
-              </div>
-              <div className="text-sm text-gray-400">
-                Location: <span className="font-medium text-gray-200">{item.location}</span>
-              </div>
-            </div>
-          </div>
-        );
-
-      default:
-        return <div>Unknown item type</div>;
+        </div>
+      );
     }
+    if (pick.type === 'hackathon') {
+      return (
+        <div className="space-y-4 text-white">
+          <div>
+            <h3 className="text-xl font-bold mb-2 futuristic-text">{item.name}</h3>
+            <p className="text-gray-300">{item.description}</p>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="bg-white/5 p-4 rounded-lg accent-ring">
+              <div className="text-sm text-gray-300">Prize Pool</div>
+              <div className="text-2xl font-bold">{item.prize}</div>
+            </div>
+            <div className="bg-white/5 p-4 rounded-lg accent-ring">
+              <div className="text-sm text-gray-300">Participants</div>
+              <div className="text-2xl font-bold">{item.participants.toLocaleString()}</div>
+            </div>
+          </div>
+          <div className="text-sm text-gray-300">Deadline: <span className="font-medium text-white">{new Date(item.deadline).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+          <div>
+            <div className="text-sm text-gray-300 mb-2">Tags:</div>
+            <div className="flex flex-wrap gap-2">
+              {item.tags.map((tag: string, index: number) => (
+                <span key={index} className="px-3 py-1 bg-white/10 text-white rounded-full text-sm accent-ring">{tag}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      );
+    }
+    // job
+    return (
+      <div className="space-y-4 text-white">
+        <div>
+          <h3 className="text-xl font-bold mb-1 futuristic-text">{item.title}</h3>
+          <p className="text-lg text-gray-300 mb-2">{item.company}</p>
+          <p className="text-gray-300">{item.description}</p>
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="bg-white/5 p-4 rounded-lg accent-ring">
+            <div className="text-sm text-gray-300">Salary Range</div>
+            <div className="text-lg font-bold">{item.salary}</div>
+          </div>
+          <div className="bg-white/5 p-4 rounded-lg accent-ring">
+            <div className="text-sm text-gray-300">Experience Required</div>
+            <div className="text-lg font-bold">{item.experience}</div>
+          </div>
+        </div>
+        <div className="flex justify-between items-center">
+          <div className="text-sm text-gray-300">Type: <span className="px-2 py-1 rounded-full text-xs font-medium bg-white/10 text-white accent-ring">{item.type}</span></div>
+          <div className="text-sm text-gray-300">Location: <span className="font-medium text-white">{item.location}</span></div>
+        </div>
+      </div>
+    );
   };
 
   const getJoinFunction = (pick: any, item: any) => {
     if (!item) return undefined;
-
     switch (pick.type) {
       case 'stake-pool':
-        return () => onJoinStakePool(item.id);
+        return onJoinStakePool ? () => onJoinStakePool(item.id) : undefined;
       case 'hackathon':
-        return () => onJoinHackathon(item.id);
+        return onJoinHackathon ? () => onJoinHackathon(item.id) : undefined;
       case 'job':
-        return () => onApplyJob(item.id);
+        return onApplyJob ? () => onApplyJob(item.id) : undefined;
       default:
         return undefined;
     }
@@ -229,19 +142,17 @@ const TopPicks: React.FC<TopPicksProps> = ({
 
   return (
     <section className="mb-8">
-      <h2 className="text-2xl font-bold text-white mb-4 flex items-center gap-2 futuristic-glow">
-        <Star className="text-yellow-400 pulse-glow" />
-        Top Picks
+      <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+        <Star className="text-white" />
+        <span className="accent-gradient-text">Top Picks</span>
       </h2>
-      
       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide">
         {topPicks.map((pick) => {
           const item = getFullItem(pick);
-          
           return (
             <ExpandableCard
               key={pick.id}
-              className="min-w-[280px] bg-gray-900/70 backdrop-blur-md rounded-xl p-6 border border-gray-700/50 hover-glow transition-all duration-300"
+              className="min-w-[280px] floating-card bg-black/80 rounded-xl p-6 accent-hover"
               expandedContent={getExpandedContent(pick, item)}
               onJoin={getJoinFunction(pick, item)}
               joinText={getJoinText(pick.type)}
@@ -252,15 +163,13 @@ const TopPicks: React.FC<TopPicksProps> = ({
                     <span className="text-2xl">{getTypeIcon(pick.type)}</span>
                     <h3 className="font-semibold text-lg futuristic-text">{pick.title}</h3>
                   </div>
-                  <div className="flex items-center gap-1 bg-yellow-500/20 px-2 py-1 rounded-full pulse-glow">
-                    <TrendingUp size={14} className="text-yellow-400" />
-                    <span className="text-yellow-400 text-xs font-medium">{pick.highlight}</span>
+                  <div className="flex items-center gap-1 bg-white/10 px-2 py-1 rounded-full">
+                    <TrendingUp size={14} className="text-white" />
+                    <span className="text-white text-xs font-medium">{pick.highlight}</span>
                   </div>
                 </div>
-                
-                <p className="text-gray-200 text-sm mb-4">{pick.description}</p>
-                
-                <div className={`w-full bg-gradient-to-r ${getTypeColor(pick.type)} hover:opacity-90 text-white py-2 rounded-lg transition-all duration-300 transform hover:scale-105 text-center font-medium futuristic-button`}>
+                <p className="text-gray-300 text-sm mb-4">{pick.description}</p>
+                <div className="w-full bg-white/10 hover:bg-white/15 text-white py-2 rounded-lg transition-all duration-300 text-center font-medium accent-hover">
                   View Details
                 </div>
               </div>
