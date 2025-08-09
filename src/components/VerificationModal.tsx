@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { X, QrCode, Smartphone, CheckCircle, XCircle, Loader } from 'lucide-react';
 import QRCode from 'qrcode';
 import { verificationService, QRData } from '../services/verificationService';
+import { API_CONFIG, getVerificationStatusUrl } from '../config/api';
 
 interface VerificationModalProps {
   isOpen: boolean;
@@ -20,9 +21,10 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
   const [error, setError] = useState<string>('');
   const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
   const [isRequestInProgress, setIsRequestInProgress] = useState<boolean>(false);
-  const [verifierWindow, setVerifierWindow] = useState<Window | null>(null);
   const [debugInfo, setDebugInfo] = useState<string[]>([]);
-  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const popupRef = useRef<Window | null>(null);
+  const sessionIdRef = useRef<string | null>(null);
+  const pollTimerRef = useRef<number | null>(null);
 
   const addDebugInfo = (info: string) => {
     setDebugInfo(prev => [...prev.slice(-4), `${new Date().toLocaleTimeString()}: ${info}`]);
@@ -46,6 +48,12 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
           return;
         }
         
+        // Ensure session matches (ignore stale messages)
+        const msgSession = event.data?.sessionId ? String(event.data.sessionId) : null;
+        if (!msgSession || (sessionIdRef.current && msgSession !== sessionIdRef.current)) {
+          return;
+        }
+
         addDebugInfo(`Received message: ${event.data?.type || 'unknown'}`);
         console.log('🔍 Received relevant postMessage event:', {
           origin: event.origin,
@@ -59,30 +67,36 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
             console.log("✅ Received SUCCESS message from child window:", event.data);
             setStatus('success');
             setVerificationMessage(event.data.message || 'Verification successful!');
-            if (pollingInterval) clearInterval(pollingInterval);
+            if (pollTimerRef.current) {
+              clearInterval(pollTimerRef.current);
+              pollTimerRef.current = null;
+            }
             setTimeout(() => {
               onVerificationComplete(true);
               onClose();
             }, 2000);
             
-            if (verifierWindow && !verifierWindow.closed) {
-              verifierWindow.close();
+            if (popupRef.current && !popupRef.current.closed) {
+              popupRef.current.close();
             }
-            setVerifierWindow(null);
+            popupRef.current = null;
           } else if (event.data.type === 'verificationFailure') {
             addDebugInfo("FAILURE message received!");
             console.log("❌ Received FAILURE message from child window:", event.data);
             setStatus('failed');
             setVerificationMessage(event.data.message || 'Verification failed');
-            if (pollingInterval) clearInterval(pollingInterval);
+            if (pollTimerRef.current) {
+              clearInterval(pollTimerRef.current);
+              pollTimerRef.current = null;
+            }
             setTimeout(() => {
               onVerificationComplete(false);
             }, 2000);
             
-            if (verifierWindow && !verifierWindow.closed) {
-              verifierWindow.close();
+            if (popupRef.current && !popupRef.current.closed) {
+              popupRef.current.close();
             }
-            setVerifierWindow(null);
+            popupRef.current = null;
           }
         }
       };
@@ -90,13 +104,13 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
       window.addEventListener('message', handleVerificationMessage);
       return () => {
         window.removeEventListener('message', handleVerificationMessage);
-        if (verifierWindow && !verifierWindow.closed) {
-          verifierWindow.close();
+        if (popupRef.current && !popupRef.current.closed) {
+          popupRef.current.close();
         }
-        if (pollingInterval) clearInterval(pollingInterval);
+        if (pollTimerRef.current) clearInterval(pollTimerRef.current);
       };
     }
-  }, [isOpen, verifierWindow, pollingInterval]);
+  }, [isOpen, popupRef, pollTimerRef]);
 
   const initializeVerification = async () => {
     if (isRequestInProgress || status !== 'loading') {
@@ -167,88 +181,78 @@ const VerificationModal: React.FC<VerificationModalProps> = ({
     }
   };
 
-  const startPolling = (sessionId: number) => {
-    addDebugInfo("Starting polling for verification status");
-    const interval = setInterval(async () => {
+  const startPolling = useCallback((sessionId: string) => {
+    sessionIdRef.current = sessionId;
+    const url = getVerificationStatusUrl(sessionId);
+
+    // Clear any existing timer
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+
+    // Poll every 2s
+    pollTimerRef.current = window.setInterval(async () => {
       try {
-        const response = await fetch(`https://7fbab6d82de1.ngrok-free.app/api/verification-status/${sessionId}`, {
-          headers: { 'ngrok-skip-browser-warning': 'true' }
+        const res = await fetch(url, {
+          headers: {
+            Accept: 'application/json',
+            'ngrok-skip-browser-warning': 'true'
+          }
         });
-        if (response.ok) {
-          const status = await response.json();
-          if (status.completed) {
-            addDebugInfo(`Polling detected completion: ${status.success ? 'SUCCESS' : 'FAILURE'}`);
-            clearInterval(interval);
-            setPollingInterval(null);
-            if (status.success) {
-              setStatus('success');
-              setVerificationMessage('Verification completed successfully!');
-              setTimeout(() => {
-                onVerificationComplete(true);
-                onClose();
-              }, 2000);
-            } else {
-              setStatus('failed');
-              setVerificationMessage('Verification failed');
-              setTimeout(() => {
-                onVerificationComplete(false);
-              }, 2000);
-            }
+        if (!res.ok) {
+          // Surface 4xx/5xx for debugging
+          addDebugInfo(`poll ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        addDebugInfo(`poll ok completed=${data.completed} success=${data.success}`);
+        if (data.completed) {
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+          if (data.success) {
+            setStatus('success');
+            setVerificationMessage(data.message || 'Verification successful!');
+            try { popupRef.current?.close(); } catch {}
+            setTimeout(() => {
+              onVerificationComplete(true);
+              onClose();
+            }, 1000);
+          } else {
+            setStatus('failed');
+            setVerificationMessage(data.message || 'Verification failed');
+            try { popupRef.current?.close(); } catch {}
+            setTimeout(() => {
+              onVerificationComplete(false);
+            }, 1000);
           }
         }
-      } catch (error) {
-        console.log('Polling error (expected if endpoint not implemented):', error);
+      } catch (err) {
+        addDebugInfo('poll error');
       }
     }, 2000);
-    
-    setPollingInterval(interval);
-  };
+  }, [onClose, onVerificationComplete]);
 
-  const openVerifierWindow = (walletUrl: string) => {
-    addDebugInfo("Opening verifier window");
-    const width = 480;
-    const height = 700;
-    const left = window.screenX + (window.outerWidth - width) / 2;
-    const top = window.screenY + (window.outerHeight - height) / 2;
-    
-    const verifier = window.open(
-      walletUrl,
-      'VerifierWindow',
-      `width=${width},height=${height},left=${left},top=${top},resizable=yes,scrollbars=yes`
-    );
-    
-    if (!verifier) {
-      setError('Popup blocked. Please allow popups for this site and try again.');
-      setStatus('failed');
-      return null;
-    }
-    
-    setVerifierWindow(verifier);
+  const openVerifierWindow = useCallback((walletUrl: string, sessionId: string) => {
+    sessionIdRef.current = sessionId;
+    // Move to verifying state immediately
     setStatus('verifying');
-    
-    // Start polling as backup
-    if (qrData) {
-      startPolling(qrData.sessionId);
-    }
-    
-    // Monitor if window is closed manually by user
-    const checkClosed = setInterval(() => {
-      if (verifier.closed) {
-        clearInterval(checkClosed);
-        setVerifierWindow(null);
-        if (status === 'verifying') {
-          setStatus('failed');
-          setError('Verification window was closed before completion');
-        }
-      }
-    }, 1000);
-    
-    return verifier;
-  };
+    addDebugInfo('opening wallet');
+    // Use a named window so window.opener is preserved (avoid noopener)
+    popupRef.current = window.open(
+      walletUrl,
+      'privadoWalletPopup',
+      'width=430,height=750,menubar=no,toolbar=no,location=no,status=no'
+    );
+    // Start polling as a fallback even if postMessage doesn't arrive
+    startPolling(sessionId);
+  }, [startPolling]);
 
   const handleOpenWallet = () => {
     if (qrData) {
-      openVerifierWindow(qrData.walletUrl);
+      openVerifierWindow(qrData.walletUrl, String(qrData.sessionId));
     }
   };
 

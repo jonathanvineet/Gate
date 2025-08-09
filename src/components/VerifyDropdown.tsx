@@ -25,7 +25,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // DIDs and constants
-  const ISSUER_DID = "did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig";
+  const ISSUER_DID = "did:polygonid:polygon:amoy:2qVM1DRgEDDd2RYn7PETLbCUqbgUSNqCVEfrnFkCVs";
   const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
 
   // Debug logs
@@ -324,7 +324,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       };
     }
 
-    const createCurl = `curl -X POST "https://3c52dc2d710d.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials" \\
+    const createCurl = `curl -X POST "https://880557ac9c31.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials" \\
   -H "Accept: application/json" \\
   -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
   -H "ngrok-skip-browser-warning: true" \\
@@ -377,7 +377,7 @@ Employee ID: "${mockCompanyInfo.employeeId}" → y: ${employeeNumbers.y}`;
 
   const handleOfferFlow = async (credentialId: string) => {
     const encodedIssuerDID = encodeURIComponent(ISSUER_DID);
-    const offerCurl = `curl -X GET "https://3c52dc2d710d.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials/${credentialId}/offer?type=universalLink" \\
+    const offerCurl = `curl -X GET "https://880557ac9c31.ngrok-free.app/v2/identities/${encodedIssuerDID}/credentials/${credentialId}/offer?type=universalLink" \\
   -H "Accept: application/json" \\
   -H "Authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy" \\
   -H "ngrok-skip-browser-warning: true"`;

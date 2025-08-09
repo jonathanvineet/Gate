@@ -69,6 +69,9 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const port = 8000;
 
+// Ensure correct client IP and host when behind ngrok/proxies
+app.set('trust proxy', true);
+
 // Add support for JSON body parsing
 app.use(express.json());
 app.use('/v2/agent', express.text());
@@ -76,28 +79,55 @@ app.use('/v2/agent', express.text());
 // Serve static files at /static path
 app.use('/static', express.static(path.join(__dirname, "../static")));
 
-// Replace this:
-const allowedOrigins = [
-  'http://localhost:5173',
-  'https://93155b807c22.ngrok-free.app', // your frontend ngrok URL (updated)
-  'https://7fbab6d82de1.ngrok-free.app', // your backend ngrok URL (updated)
-  'https://3c52dc2d710d.ngrok-free.app', // your issuer ngrok URL (updated)
-  'https://wallet.privado.id'
+// New, pattern-based allowlist with optional env overrides
+const allowedOriginPatterns = [
+  /^http:\/\/localhost(:\d+)?$/,
+  /^https:\/\/[a-z0-9-]+\.ngrok-free\.app$/,
+  /^https:\/\/wallet\.privado\.id$/
 ];
+const extraAllowedOrigins = (process.env.CORS_ALLOWED_ORIGINS || '')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: function(origin, callback) {
-    // allow requests with no origin (like mobile apps, curl, etc.)
-    if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin)) {
+  origin: function (origin, callback) {
+    if (!origin) return callback(null, true); // allow non-browser clients
+    if (extraAllowedOrigins.includes(origin) || allowedOriginPatterns.some(rx => rx.test(origin))) {
       return callback(null, true);
-    } else {
-      return callback(new Error('Not allowed by CORS'));
     }
+    return callback(null, false); // Do not throw; returning false disables CORS for that origin without 500
   },
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'ngrok-skip-browser-warning'],
   credentials: false
 }));
+
+// Global preflight handler to guarantee CORS headers on any OPTIONS route
+app.use((req, res, next) => {
+  if (req.method !== 'OPTIONS') return next();
+
+  const origin = req.headers.origin;
+  const isAllowed =
+    !origin ||
+    extraAllowedOrigins.includes(origin) ||
+    allowedOriginPatterns.some(rx => rx.test(origin));
+
+  if (origin && isAllowed) {
+    res.header('Access-Control-Allow-Origin', origin);
+    res.header('Vary', 'Origin');
+  } else if (!origin) {
+    res.header('Access-Control-Allow-Origin', '*');
+  }
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning');
+  res.header('Access-Control-Max-Age', '86400');
+
+  // Optional: debug to confirm this path is hit
+  console.log('CORS preflight:', { origin, path: req.path });
+
+  return res.status(204).end();
+});
 
 // Middleware to check rate limiting
 function checkRateLimit(limiter, key, res) {
@@ -145,7 +175,7 @@ app.options('/v2/agent', (req, res) => {
   res.status(204).end();
 });
 
-const ISSUER_URL = 'https://3c52dc2d710d.ngrok-free.app'; // your issuer ngrok URL (updated)
+const ISSUER_URL = 'https://880557ac9c31.ngrok-free.app'; // your issuer ngrok URL (updated)
 
 // Proxy agent requests to the issuer
 app.all('/v2/agent', async (req, res) => {
@@ -186,6 +216,43 @@ app.options("/api/qr-data", (req, res) => {
   res.status(204).end();
 });
 
+// Ensure preflight for verification status succeeds
+app.options('/api/verification-status/:sessionId', (req, res) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Vary', 'Origin');
+  res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, ngrok-skip-browser-warning');
+  res.header('Access-Control-Max-Age', '86400');
+  // Optional: debug to confirm this path is hit
+  console.log('CORS preflight (verification-status):', { origin: req.headers.origin, path: req.path });
+  res.status(204).end();
+});
+
+app.get("/api/verification-status/:sessionId", (req, res) => {
+  try {
+    res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
+    res.setHeader('Vary', 'Origin');
+    const sessionId = req.params.sessionId;
+    const result = verificationResults.get(sessionId);
+    return res.status(200).json({
+      completed: !!result,
+      success: result?.success || false,
+      message: result?.message || '',
+      timestamp: result?.timestamp || null,
+      credentialDetails: result?.response?.verifications?.[0]?.proof?.credential?.credentialSubject || null
+    });
+  } catch (e) {
+    console.error('verification-status error:', e);
+    return res.status(200).json({
+      completed: false,
+      success: false,
+      message: '',
+      timestamp: null,
+      credentialDetails: null
+    });
+  }
+});
+
 app.listen(port, () => {
   console.log("server running on port 8000");
 });
@@ -205,7 +272,7 @@ function replaceLocalhostUrls(obj, ngrokUrl) {
   return obj;
 }
 
-const ISSUER_DID = "did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig"; // Updated issuer DID
+const ISSUER_DID = "did:polygonid:polygon:amoy:2qVM1DRgEDDd2RYn7PETLbCUqbgUSNqCVEfrnFkCVs"; // Updated issuer DID
 const SUBJECT_DID = "did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M";
 
 // GetQR returns auth request
@@ -220,7 +287,7 @@ async function getAuthRequest(req, res) {
     if (req.get("host").includes("ngrok")) {
       hostUrl = `https://${req.get("host")}`;
     } else {
-      hostUrl = "https://7fbab6d82de1.ngrok-free.app"; // Updated backend ngrok URL
+      hostUrl = "https://53da73e8d660.ngrok-free.app"; // Updated backend ngrok URL
     }
     
     const audience = ISSUER_DID;
@@ -280,20 +347,6 @@ async function getAuthRequest(req, res) {
 
 // Store verification results
 const verificationResults = new Map();
-
-// Add verification status endpoint
-app.get("/api/verification-status/:sessionId", (req, res) => {
-  const sessionId = req.params.sessionId;
-  const result = verificationResults.get(sessionId);
-  
-  res.json({
-    completed: !!result,
-    success: result?.success || false,
-    message: result?.message || '',
-    timestamp: result?.timestamp || null,
-    credentialDetails: result?.response?.verifications[0]?.proof?.credential?.credentialSubject || null
-  });
-});
 
 // Callback verifies the proof after sign-in callbacks
 async function callback(req, res) {
@@ -550,7 +603,7 @@ async function generateQRData(req, res) {
       hostUrl = `https://${req.get("host")}`;
     } else {
       // For local development, force the ngrok URL instead of localhost
-      hostUrl = "https://7fbab6d82de1.ngrok-free.app"; // Updated backend ngrok URL
+      hostUrl = "https://53da73e8d660.ngrok-free.app"; // Updated backend ngrok URL
     }
     const audience = ISSUER_DID;
     const uri = `${hostUrl}${callbackURL}?sessionId=${sessionId}`;    
@@ -626,3 +679,15 @@ async function generateQRData(req, res) {
     });
   }
 }
+
+// Global error handler (keep last)
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  const origin = req.headers.origin || '*';
+  res.header('Access-Control-Allow-Origin', origin);
+  res.header('Vary', 'Origin');
+  if (typeof err?.message === 'string' && err.message.toLowerCase().includes('cors')) {
+    return res.status(403).json({ error: 'CORS not allowed', origin });
+  }
+  return res.status(500).json({ error: 'Internal Server Error' });
+});

@@ -8,8 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "update-ngrok": "echo 'Current ngrok URLs:' && echo 'Frontend: https://93155b807c22.ngrok-free.app' && echo 'Backend: https://7fbab6d82de1.ngrok-free.app' && echo 'Issuer: https://3c52dc2d710d.ngrok-free.app'",
-    "curl-example": "echo 'Example credential creation curl:' && echo 'curl -X POST \"https://3c52dc2d710d.ngrok-free.app/v2/identities/did%3Apolygonid%3Apolygon%3Aamoy%3A2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig/credentials\" -H \"accept: application/json\" -H \"authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy\" -H \"content-type: application/json\" -d \"{\\\"credentialSchema\\\":\\\"https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json\\\",\\\"type\\\":\\\"KYCAgeCredential\\\",\\\"credentialSubject\\\":{\\\"id\\\":\\\"did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M\\\",\\\"birthday\\\":19960424,\\\"documentType\\\":2},\\\"expiration\\\":1903357766}\"'"
+    "update-ngrok": "echo 'Current ngrok URLs:' && echo 'Frontend: https://93155b807c22.ngrok-free.app' && echo 'Backend: https://7fbab6d82de1.ngrok-free.app' && echo 'Issuer: https://880557ac9c31.ngrok-free.app'",
+    "curl-example": "echo 'Example credential creation curl:' && echo 'curl -X POST \"https://880557ac9c31.ngrok-free.app/v2/identities/did%3Apolygonid%3Apolygon%3Aamoy%3A2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig/credentials\" -H \"accept: application/json\" -H \"authorization: Basic dXNlci1pc3N1ZXI6cGFzc3dvcmQtaXNzdWVy\" -H \"content-type: application/json\" -d \"{\\\"credentialSchema\\\":\\\"https://raw.githubusercontent.com/iden3/claim-schema-vocab/main/schemas/json/KYCAgeCredential-v3.json\\\",\\\"type\\\":\\\"KYCAgeCredential\\\",\\\"credentialSubject\\\":{\\\"id\\\":\\\"did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M\\\",\\\"birthday\\\":19960424,\\\"documentType\\\":2},\\\"expiration\\\":1903357766}\"'"
   },
   "dependencies": {
     "buffer": "^6.0.3",

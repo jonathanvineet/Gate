@@ -1,12 +1,12 @@
-const ISSUER_DID = 'did:polygonid:polygon:amoy:2qRjbs95WgzMDEA5w7XEkERbsn6ptrHTn7ftnPcyig'; // Updated issuer DID
+const ISSUER_DID = 'did:polygonid:polygon:amoy:2qVM1DRgEDDd2RYn7PETLbCUqbgUSNqCVEfrnFkCVs'; // Updated issuer DID
 const SUBJECT_DID = 'did:iden3:privado:main:2ScwqMj93k1wGLto2qp7MJ6UNzRULo8jnVcf23rF8M';
 
 export const API_CONFIG = {
   // Use proxy in development, direct server URL in production
-  BASE_URL: import.meta.env.DEV ? '' : 'https://3c52dc2d710d.ngrok-free.app', // Updated issuer ngrok URL
+  BASE_URL: import.meta.env.DEV ? '' : 'https://880557ac9c31.ngrok-free.app', // Updated issuer ngrok URL
   
   // Verification service URL (separate from issuer)
-  VERIFICATION_BASE_URL: 'https://7fbab6d82de1.ngrok-free.app', // Updated backend ngrok URL
+  VERIFICATION_BASE_URL: import.meta.env.DEV ? '' : 'https://53da73e8d660.ngrok-free.app', // Updated backend ngrok URL
   
   // Identity DID - this should match your issuer identity
   IDENTITY_DID: encodeURIComponent(ISSUER_DID),
@@ -45,4 +45,10 @@ export const createCredentialPayload = (birthday: string) => {
     },
     expiration: 1903357766
   };
+};
+
+// New: centralize verification status URL
+export const getVerificationStatusUrl = (sessionId: string | number): string => {
+  const base = API_CONFIG.VERIFICATION_BASE_URL; // '' in dev -> relative path
+  return `${base}/api/verification-status/${sessionId}`;
 };

@@ -30,15 +30,15 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://7fbab6d82de1.ngrok-free.app', // Updated backend ngrok URL
+        target: 'http://localhost:8000', // route to local verifier backend
         changeOrigin: true,
-        secure: true,
+        secure: false,
         headers: {
           'ngrok-skip-browser-warning': 'true'
         }
       },
       '/v2': {
-        target: 'https://3c52dc2d710d.ngrok-free.app', // Updated issuer ngrok URL
+        target: 'https://880557ac9c31.ngrok-free.app', // issuer ngrok URL
         changeOrigin: true,
         secure: true,
         headers: {

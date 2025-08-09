@@ -196,7 +196,7 @@ func main() {
 	mux := chi.NewRouter()
 
 	corsMiddleware := cors.New(cors.Options{
-		AllowedOrigins:   []string{"localhost", "127.0.0.1", "*", "https://wallet.privado.id"},
+		AllowedOrigins:   []string{"localhost", "127.0.0.1", "*", "https://wallet.privado.id", "https://0a4cdc17f2d4.ngrok-free.app", "https://7fbab6d82de1.ngrok-free.app"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "ngrok-skip-browser-warning"},
 		AllowCredentials: true,
