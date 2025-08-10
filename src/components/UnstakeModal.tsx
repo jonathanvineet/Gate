@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getEthersProvider } from '../wallet/okxWallet';
 import { X, Minus, AlertTriangle, CheckCircle, ExternalLink, Loader, Info } from 'lucide-react';
 import { useStakingContract } from '../hooks/useStakingContract';
 import { stakingRecords } from '../utils/stakingRecords';
@@ -39,8 +40,8 @@ const UnstakeModal: React.FC<UnstakeModalProps> = ({
 
   const loadUserStakedBalance = async () => {
     try {
-      const provider = await (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
-      if (provider) {
+  const provider = await getEthersProvider().catch(() => null as any);
+  if (provider) {
         const signer = await provider.getSigner();
         const userAddress = await signer.getAddress();
         const balance = await getStakeAmount(userAddress);
@@ -65,8 +66,8 @@ const UnstakeModal: React.FC<UnstakeModalProps> = ({
 
     let userAddress = 'Unknown';
     try {
-      const provider = await (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
-      if (provider) {
+  const provider = await getEthersProvider().catch(() => null as any);
+  if (provider) {
         const signer = await provider.getSigner();
         userAddress = await signer.getAddress();
       }

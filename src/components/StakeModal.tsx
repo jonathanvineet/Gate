@@ -17,6 +17,7 @@ interface StakeModalProps {
   requiredToken?: { symbol: string; address: string; decimals?: number };
   requiredChainId?: number;
   stakingContractAddress?: string;
+  hackathonMode?: boolean; // when true, adjust UI copy and CSV category
 }
 
 const StakeModal: React.FC<StakeModalProps> = ({
@@ -28,7 +29,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
   apy,
   requiredToken,
   requiredChainId,
-  stakingContractAddress
+  stakingContractAddress,
+  hackathonMode
 }) => {
   const [stakeAmount, setStakeAmount] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
@@ -130,11 +132,12 @@ const StakeModal: React.FC<StakeModalProps> = ({
     const detectChain = async () => {
       try {
         if ((window as any).ethereum) {
-          const { ethers } = await import('ethers');
-          const provider = new ethers.BrowserProvider((window as any).ethereum);
+          const provider = await (await import('../wallet/okxWallet')).getEthersProvider();
           const net = await provider.getNetwork();
-          const cid = Number(net.chainId?.toString?.() ?? net.chainId);
-          if (!Number.isNaN(cid)) setWalletChainId(cid);
+          const cid = Number(net.chainId?.toString() ?? net.chainId);
+          if (!Number.isNaN(cid)) {
+            setWalletChainId(cid);
+          }
         }
       } catch {}
     };
@@ -166,10 +169,10 @@ const StakeModal: React.FC<StakeModalProps> = ({
     const target = requiredChainId ?? walletChainId;
     if (!target) return; // nothing to do
     try {
-      const provider = (window as any).ethereum;
-      if (!provider) return;
-      const chainIdHex = '0x' + target.toString(16);
-      await provider.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: chainIdHex }] });
+        const { switchChain } = await import('../wallet/okxWallet');
+        await switchChain(target).catch((e: any) => {
+          console.error('Failed to switch chain:', e);
+        });
     } catch (e: any) {
       if (e?.code === 4902 && requiredChainId) {
         const addParams: any = (() => {
@@ -195,7 +198,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
           }
         })();
         if (addParams) {
-          await (window as any).ethereum.request({ method: 'wallet_addEthereumChain', params: [addParams] });
+          const { addChain } = await import('../wallet/okxWallet');
+          await addChain(addParams);
         } else {
           throw new Error('Unsupported network for auto add');
         }
@@ -244,7 +248,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
         slippageBps,
       });
       setStep('swap', { detail: 'Building swap transaction' });
-      const provider = (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
+  const provider = await (await import('../wallet/okxWallet')).getEthersProvider().catch(() => null as any);
       if (!provider) throw new Error('Wallet not connected');
       const signer = await provider.getSigner();
       const user = await signer.getAddress();
@@ -304,7 +308,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
         // Get user address for the record
         let userAddress = 'Unknown';
         try {
-          const provider = (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
+          const { getEthersProvider } = await import('../wallet/okxWallet');
+          const provider = await getEthersProvider().catch(() => null as any);
           if (provider) {
             const signer = await provider.getSigner();
             userAddress = await signer.getAddress();
@@ -319,7 +324,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
           tokenSymbol: stakingState.tokenInfo?.symbol || 'TT',
           apy,
           userAddress,
-          transactionHash: (res as any).txHash || stakingState.txHash || ''
+          transactionHash: (res as any).txHash || stakingState.txHash || '',
+          category: hackathonMode ? 'hackathon' : 'stake'
         });
 
         // Local aggregate balances
@@ -372,7 +378,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
     let userAddress = 'Unknown';
     try {
-      const provider = await (window as any).ethereum ? new (await import('ethers')).ethers.BrowserProvider((window as any).ethereum) : null;
+      const { getEthersProvider } = await import('../wallet/okxWallet');
+      const provider = await getEthersProvider().catch(() => null as any);
       if (provider) {
         const signer = await provider.getSigner();
         userAddress = await signer.getAddress();
@@ -391,7 +398,8 @@ const StakeModal: React.FC<StakeModalProps> = ({
         tokenSymbol: stakingState.tokenInfo?.symbol || 'TT',
         apy: apy,
         userAddress: userAddress,
-        transactionHash: result.txHash || ''
+        transactionHash: result.txHash || '',
+        category: hackathonMode ? 'hackathon' : 'stake'
       });
 
       stakingRecords.recordStake(
@@ -438,7 +446,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
         return { symbol: sym, decimals: dec };
       }
       const { ethers } = await import('ethers');
-      const provider = (window as any).ethereum ? new ethers.BrowserProvider((window as any).ethereum) : null;
+  const provider = await (await import('../wallet/okxWallet')).getEthersProvider().catch(() => null as any);
       if (!provider) return null;
       // Best-effort precheck; don't surface RPC errors to the user on testnets
       try {
@@ -520,7 +528,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
       const decimals = meta2?.decimals ?? 18;
       if (!fromAmount || Number(fromAmount) <= 0) throw new Error('Enter a valid from amount');
       const { ethers } = await import('ethers');
-      const provider = (window as any).ethereum ? new ethers.BrowserProvider((window as any).ethereum) : null;
+  const provider = await (await import('../wallet/okxWallet')).getEthersProvider().catch(() => null as any);
       if (!provider) throw new Error('Wallet not connected');
       const signer = await provider.getSigner();
       const user = await signer.getAddress();
@@ -603,9 +611,9 @@ const StakeModal: React.FC<StakeModalProps> = ({
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
               <Coins className="text-purple-600" size={28} />
-              <h2 className="text-2xl font-bold text-gray-800">Stake Tokens</h2>
+              <h2 className="text-2xl font-bold text-gray-800">{hackathonMode ? 'Confirm Registration' : 'Stake Tokens'}</h2>
             </div>
-            <p className="text-gray-600 text-sm">Stake {tokenSymbol} in {poolName}</p>
+            <p className="text-gray-600 text-sm">{hackathonMode ? `Stake ${tokenSymbol} to register for ${poolName}` : `Stake ${tokenSymbol} in ${poolName}`}</p>
           </div>
         </div>
 
@@ -615,11 +623,13 @@ const StakeModal: React.FC<StakeModalProps> = ({
             <div className="space-y-4 text-center">
               <CheckCircle className="text-green-500 mx-auto" size={64} />
               <div>
-                <h3 className="text-lg font-semibold text-green-600 mb-2">
-                  Staking Successful!
-                </h3>
+                <h3 className="text-lg font-semibold text-green-600 mb-2">{hackathonMode ? 'Registration Confirmed!' : 'Staking Successful!'}</h3>
                 <p className="text-gray-600 text-sm mb-4">
-                  You have successfully staked {stakeAmount} {tokenSymbol} in {poolName}
+                  {hackathonMode ? (
+                    <>You have successfully staked {stakeAmount} {tokenSymbol} for {poolName}</>
+                  ) : (
+                    <>You have successfully staked {stakeAmount} {tokenSymbol} in {poolName}</>
+                  )}
                 </p>
                 {stakingState.txHash && (
                   <a
@@ -791,7 +801,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
                       <p className="mb-2">The app is experiencing network connectivity problems. Using mock data for testing purposes.</p>
                       <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
                         <p className="text-xs text-blue-800">
-                          <strong>Troubleshooting:</strong> Try switching to a different network in MetaMask, or use a different RPC endpoint for your current network.
+                          <strong>Troubleshooting:</strong> Try switching to a different network in OKX Wallet, or use a different RPC endpoint for your current network.
                         </p>
                       </div>
                     </div>
@@ -837,15 +847,24 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Pool Info */}
               <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <h3 className="font-semibold text-gray-800 mb-3">Pool Information</h3>
+                <h3 className="font-semibold text-gray-800 mb-3">{hackathonMode ? 'Registration Details' : 'Pool Information'}</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span className="text-gray-600">Pool Name:</span>
                     <span className="font-medium">{poolName}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">APY:</span>
-                    <span className="font-medium text-green-600">{apy}</span>
+                    {!hackathonMode ? (
+                      <>
+                        <span className="text-gray-600">APY:</span>
+                        <span className="font-medium text-green-600">{apy}</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-gray-600">Category:</span>
+                        <span className="font-medium text-purple-600">Hackathon</span>
+                      </>
+                    )}
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">Minimum Stake:</span>
@@ -857,13 +876,13 @@ const StakeModal: React.FC<StakeModalProps> = ({
                   </div>
                   {(isTokenConfigured || isNetworkIssue || isInvalidContract) && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">Total Staked:</span>
+                      <span className="text-gray-600">{hackathonMode ? 'Total Registration Stake:' : 'Total Staked:'}</span>
                       <span className="font-medium text-blue-600">{parseFloat(totalStaked).toFixed(2)} {tokenSymbol}</span>
                     </div>
                   )}
-                  {(isNetworkIssue || isInvalidContract) && (
+          {(isNetworkIssue || isInvalidContract) && (
                     <div className="text-xs text-orange-600 mt-2">
-                      * Using mock data due to network or contract issues
+            * {hackathonMode ? 'Using mock data for registration on this network' : 'Using mock data due to network or contract issues'}
                     </div>
                   )}
                 </div>
@@ -1072,11 +1091,11 @@ const StakeModal: React.FC<StakeModalProps> = ({
                 {stakingState.isLoading || isRetrying ? (
                   <>
                     <Loader className="animate-spin" size={16} />
-                    {isRetrying ? `Retrying (${retryCount}/3)...` : (isNetworkIssue || isInvalidContract ? 'Simulating...' : 'Staking...')}
+                    {isRetrying ? `Retrying (${retryCount}/3)...` : (isNetworkIssue || isInvalidContract ? (hackathonMode ? 'Simulating registration…' : 'Simulating…') : (hackathonMode ? 'Registering…' : 'Staking...'))}
                   </>
                 ) : (
                   <>
-                    {isNetworkIssue || isInvalidContract ? 'Test Interface' : 'Stake Now'}
+                    {isNetworkIssue || isInvalidContract ? 'Test Interface' : (hackathonMode ? 'Confirm Registration' : 'Stake Now')}
                   </>
                 )}
               </button>

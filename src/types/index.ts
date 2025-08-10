@@ -39,6 +39,14 @@ export interface Hackathon {
   deadline: string;
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
   tags: string[];
+  // Optional: registration questions asked during sign-up
+  questions?: Array<{
+    id: string;
+    label: string;
+    type: 'single' | 'multi' | 'text';
+    options?: string[]; // for single/multi
+    required?: boolean;
+  }>;
 }
 
 export interface Job {

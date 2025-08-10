@@ -21,6 +21,7 @@ const ActivityDashboard: React.FC = () => {
     uniqueCompanies: 0,
     lastStakeDate: null as string | null
   });
+  const [hackathonRecords, setHackathonRecords] = useState<StakeRecord[]>([]);
   const [expandedCompanies, setExpandedCompanies] = useState<Set<string>>(new Set());
   const [unstakeModalOpen, setUnstakeModalOpen] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<CompanyData | null>(null);
@@ -38,6 +39,7 @@ const ActivityDashboard: React.FC = () => {
   const loadActivity = () => {
     const allRecords = csvLogger.loadRecords();
     setRecords(allRecords);
+  setHackathonRecords(allRecords.filter(r => (r.category || '').toLowerCase() === 'hackathon'));
     setSummary(csvLogger.getSummary());
     console.log("Activity loaded with total records:", allRecords.length);
   };
@@ -243,6 +245,27 @@ const ActivityDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+
+        {/* Hackathon Activity */}
+        {hackathonRecords.length > 0 && (
+          <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+            <h3 className="text-white font-semibold mb-3">Hackathons</h3>
+            <div className="space-y-2">
+              {hackathonRecords.map((r, i) => (
+                <div key={i} className="rounded-lg p-3 bg-white/5 flex items-center justify-between">
+                  <div>
+                    <p className="text-white text-sm font-medium">{r.poolName}</p>
+                    <p className="text-gray-400 text-xs">{formatDate(r.date)}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-white text-sm font-mono">+{r.amount.toFixed(4)} {r.tokenSymbol}</p>
+                    <p className="text-green-400 text-xs">Registration Stake</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Company Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">

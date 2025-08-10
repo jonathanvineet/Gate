@@ -1,13 +1,12 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Code, Users, Trophy } from 'lucide-react';
 import ExpandableCard from './ExpandableCard';
 import { hackathons } from '../data/mockData';
+import HackathonRegisterModal from './HackathonRegisterModal';
 
-interface HackathonsProps {
-  onJoinHackathon: (hackathonId: string) => void;
-}
-
-const Hackathons: React.FC<HackathonsProps> = ({ onJoinHackathon }) => {
+const Hackathons: React.FC = () => {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [open, setOpen] = useState(false);
   const getDifficultyColor = (_difficulty: string) => 'text-white bg-black';
   const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
@@ -22,7 +21,7 @@ const Hackathons: React.FC<HackathonsProps> = ({ onJoinHackathon }) => {
           <ExpandableCard
             key={hackathon.id}
             className="min-w-[300px] floating-card bg-black/80 rounded-xl p-6 accent-hover"
-            onJoin={() => onJoinHackathon(hackathon.id)}
+            onJoin={() => { setSelected(hackathon.id); setOpen(true); }}
             joinText="Register Now"
             expandedContent={
               <div className="space-y-4 text-white">
@@ -77,6 +76,14 @@ const Hackathons: React.FC<HackathonsProps> = ({ onJoinHackathon }) => {
           </ExpandableCard>
         ))}
       </div>
+
+      {selected && (
+        <HackathonRegisterModal
+          isOpen={open}
+          onClose={() => { setOpen(false); setSelected(null); }}
+          hackathonId={selected}
+        />
+      )}
     </section>
   );
 };

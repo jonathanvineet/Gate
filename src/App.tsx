@@ -167,7 +167,6 @@ function App() {
         
         <MainContent
           onJoinStakePool={(id) => handleJoinAction('stake-pool', id)}
-          onJoinHackathon={(id) => handleJoinAction('hackathon', id)}
           onApplyJob={(id) => handleJoinAction('job', id)}
         />
       </div>

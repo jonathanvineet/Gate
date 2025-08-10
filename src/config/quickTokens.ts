@@ -14,7 +14,7 @@ const ETH_MAINNET = {
 // Polygon mainnet knowns
 const POLYGON = {
   wnative: '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270', // WMATIC
-  usdc: '0x3c499c542cEF5E3811e1192cE70d8cC03d5c3359', // USDC (native)
+  usdc: '0x2791Bca1f2de4661ED88A30C99a7a9449Aa84174', // USDC (native)
 };
 
 // Import staking token as a safe testnet default when real tokens are absent

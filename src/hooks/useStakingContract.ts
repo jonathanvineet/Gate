@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ethers } from 'ethers';
+import { getEthersProvider, requestAccounts } from '../wallet/okxWallet';
 import { STAKING_CONTRACT_ADDRESS as CFG_STAKING, TOKEN_ADDRESS as CFG_TOKEN, EXPECTED_CHAIN_ID as CFG_CHAIN } from '../config/staking';
 
 // Ensure window.ethereum is properly typed
@@ -539,20 +540,16 @@ export const useStakingContract = (overrides?: { contractAddress?: string; token
   };
 
   const connectWallet = async () => {
-    if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
-      throw new Error('MetaMask not installed. Please install MetaMask to use staking features.');
-    }
-
     try {
-      await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const provider = new ethers.BrowserProvider(window.ethereum);
+      await requestAccounts();
+      const provider = await getEthersProvider();
       return provider;
     } catch (error: any) {
-      if (error.code === 4001) {
+      if (error?.code === 4001) {
         throw new Error('Please connect your wallet to continue');
       }
       console.error('Wallet connection error:', error);
-      throw new Error('Failed to connect wallet. Please try again.');
+      throw new Error('OKX Wallet not available or locked. Please install, unlock, and try again.');
     }
   };
 

@@ -7,6 +7,7 @@ export type DexQuoteParams = {
   outTokenAddress: string; // token the staking pool accepts
   amount: string; // amount in base units (wei)
   slippageBps?: number; // 50 = 0.5%
+  chainIndex?: number; // prefer this on mainnet per OKX docs
 };
 
 export type DexQuote = {
@@ -34,6 +35,7 @@ export type BuiltSwapTx = {
 // Use proxy during development to avoid CORS; set VITE_OKX_DEX_BASE_URL in prod
 const DEFAULT_BASE_URL = (import.meta as any)?.env?.VITE_OKX_DEX_BASE_URL ||
   '/okx-dex';
+const OKX_DEBUG = ((import.meta as any)?.env?.VITE_OKX_DEX_DEBUG ?? 'true').toLowerCase() !== 'false';
 
 export class OkxDexService {
   private baseUrl: string;
@@ -43,55 +45,82 @@ export class OkxDexService {
     
   }
 
-  // Fetch a swap quote. Returns a best-effort quote or a mocked one if network/API fails.
+  // Map common EVM chainIds to OKX chainIndex where applicable
+  getChainIndex(chainId: number): number | undefined {
+    switch (Number(chainId)) {
+  case 1: return 1; // Ethereum
+  case 56: return 2; // BSC
+  case 137: return 3; // Polygon
+  case 42161: return 4; // Arbitrum One
+  case 10: return 5; // Optimism
+      // add more as needed
+      default: return undefined;
+    }
+  }
+
+  // Fetch a swap quote. Single call (chainId-only). On failure, return a mocked estimate but log everything.
   async getQuote(params: DexQuoteParams): Promise<DexQuote> {
-    const slippagePct = params.slippageBps != null ? (params.slippageBps / 100).toString() : undefined;
+    // Always use chainId to avoid chainIndex inconsistencies
     const qp = new URLSearchParams({
       chainId: String(params.chainId),
-      // include both naming variants for compatibility
-      inTokenAddress: params.inTokenAddress,
-      outTokenAddress: params.outTokenAddress,
       fromTokenAddress: params.inTokenAddress,
       toTokenAddress: params.outTokenAddress,
       amount: params.amount,
+      swapMode: 'exactIn',
     });
-    if (slippagePct) qp.set('slippage', slippagePct);
     const url = `${this.baseUrl}/quote?${qp.toString()}`;
-
+    if (OKX_DEBUG) {
+      console.log('[okx-dex client] getQuote request', {
+        url,
+        params: {
+          chainId: params.chainId,
+          inTokenAddress: params.inTokenAddress,
+          outTokenAddress: params.outTokenAddress,
+          amount: params.amount,
+          slippageBps: params.slippageBps,
+        }
+      });
+    }
     try {
       const res = await fetch(url, { method: 'GET' });
-      if (!res.ok) throw new Error(`Quote HTTP ${res.status}`);
-      const body = await res.json();
-      // Handle explicit error envelopes even with HTTP 200
-      if (body && typeof body === 'object' && (body.error || body.msg || body.message)) {
+      const text = await res.text().catch(() => '');
+      let body: any = null;
+      try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+      if (OKX_DEBUG) {
+        console.log('[okx-dex client] getQuote status', res.status);
+        console.log('[okx-dex client] getQuote raw', typeof body === 'string' ? body.slice(0, 4000) : body);
+      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (body && typeof body === 'object' && (body.error || body.msg || body.message) && body.code !== '0') {
         throw new Error(body.error || body.msg || body.message);
       }
-      // Attempt to normalize a few common aggregator response shapes
-      const data = body?.data || body?.result || body;
+      const payload = body?.data ?? body?.result ?? body;
+      const item = Array.isArray(payload)
+        ? payload[0]
+        : (Array.isArray(payload?.data) ? payload.data[0] : payload);
       const amountOut =
-        data?.amountOut ||
-        data?.toAmount ||
-        data?.quote?.toTokenAmount ||
-        data?.quote?.amountOut || '0';
-
-      const base: DexQuote = {
+        item?.toTokenAmount ||
+        item?.amountOut ||
+        item?.toAmount ||
+        item?.quote?.toTokenAmount ||
+        item?.quote?.amountOut || '';
+      if (OKX_DEBUG) {
+        console.log('[okx-dex client] normalized', { amountOut, estimatedGas: item?.estimateGasFee || item?.estimatedGas || item?.gas, router: item?.router || item?.to });
+      }
+      if (!amountOut || amountOut === '0') throw new Error('Empty amountOut');
+      return {
         chainId: params.chainId,
         inTokenAddress: params.inTokenAddress,
         outTokenAddress: params.outTokenAddress,
         amountIn: params.amount,
         amountOut: String(amountOut),
-        estimatedGas: String(data?.estimatedGas || data?.gas || ''),
-        routerAddress: data?.router || data?.to,
-        raw: data,
+        estimatedGas: String(item?.estimateGasFee || item?.estimatedGas || item?.gas || ''),
+        routerAddress: item?.router || item?.to,
+        raw: item,
       };
-      // Fallback to mock if we couldn't get a meaningful amountOut
-      if (!base.amountOut || base.amountOut === '0') {
-        throw new Error('No amountOut in quote');
-      }
-      return base;
     } catch (e) {
-      // Graceful mock: assume 1% aggregator fee and 1% slippage
-      // This is only for UI estimation; do not execute against it.
+      const msg = e instanceof Error ? e.message : String(e);
+      if (OKX_DEBUG) console.warn('[okx-dex client] getQuote failed, returning mock', msg);
       const mockOut = mockProportionalOut(params.amount, 0.98);
       return {
         chainId: params.chainId,
@@ -103,9 +132,8 @@ export class OkxDexService {
     }
   }
 
-  // Build a transaction for the user's wallet to execute the swap via OKX router
+  // Build a transaction for the user's wallet to execute the swap via OKX router (single call, chainId-only)
   async buildSwapTx(params: DexSwapBuildParams): Promise<BuiltSwapTx> {
-    // Use GET /swap per OKX docs; proxy signs with OK-ACCESS-* headers
     const qp = new URLSearchParams({
       chainId: String(params.chainId),
       amount: params.amount,
@@ -116,30 +144,26 @@ export class OkxDexService {
       ...(params.slippageBps != null ? { slippage: (params.slippageBps / 100).toString() } : {}),
     });
     const url = `${this.baseUrl}/swap?${qp.toString()}`;
-
-    try {
-      const res = await fetch(url, { method: 'GET' });
-      if (!res.ok) throw new Error(`Swap build HTTP ${res.status}`);
-      const body = await res.json();
-      if (body && typeof body === 'object' && (body.error || body.msg || body.message)) {
-        throw new Error(body.error || body.msg || body.message);
-      }
-      const arr = body?.data || body?.result || [];
-      const data = Array.isArray(arr) ? arr[0] : arr;
-
-      // Common aggregator tx fields
-  const to = data?.tx?.to || data?.to;
-  const dataHex = data?.tx?.data || data?.data;
-  const value = data?.tx?.value || data?.value;
-
-  if (!to || !dataHex) throw new Error('Invalid swap tx payload');
-
-      return { to, data: dataHex, value };
-    } catch (e) {
-      // Surface a clear error; caller can decide on fallback UX
-      const msg = e instanceof Error ? e.message : 'Failed to build swap tx';
-      throw new Error(msg);
+    if (OKX_DEBUG) console.log('[okx-dex client] buildSwap request', { url, params });
+    const res = await fetch(url, { method: 'GET' });
+    const text = await res.text().catch(() => '');
+    let body: any = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = text; }
+    if (OKX_DEBUG) {
+      console.log('[okx-dex client] buildSwap status', res.status);
+      console.log('[okx-dex client] buildSwap raw', typeof body === 'string' ? body.slice(0, 4000) : body);
     }
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (body && typeof body === 'object' && (body.error || body.msg || body.message) && body.code !== '0') {
+      throw new Error(body.error || body.msg || body.message);
+    }
+    const envelope = body?.data ?? body?.result ?? [];
+    const data = Array.isArray(envelope) ? envelope[0] : envelope;
+    const to = data?.tx?.to || data?.to;
+    const dataHex = data?.tx?.data || data?.data;
+    const value = data?.tx?.value || data?.value;
+    if (!to || !dataHex) throw new Error('Invalid swap tx payload');
+    return { to, data: dataHex, value };
   }
 }
 

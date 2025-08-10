@@ -4,23 +4,19 @@ import StakePools from './StakePools';
 import Hackathons from './Hackathons';
 import Jobs from './Jobs';
 import ActivityDashboard from './ActivityDashboard';
+import BuyPanel from './BuyPanel';
 
 interface MainContentProps {
   onJoinStakePool: (poolId: string) => void;
-  onJoinHackathon: (hackathonId: string) => void;
   onApplyJob: (jobId: string) => void;
 }
 
-const MainContent: React.FC<MainContentProps> = ({
-  onJoinStakePool,
-  onJoinHackathon,
-  onApplyJob
-}) => {
+const MainContent: React.FC<MainContentProps> = ({ onJoinStakePool, onApplyJob }) => {
   const [activeTab, setActiveTab] = useState<'pools' | 'activity'>('pools');
 
   return (
-    <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-      {/* Tab Navigation */}
+  <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+    {/* Tab Navigation */}
     <div className="flex items-center gap-1 mb-6 bg-black rounded-xl p-1 border border-gray-800">
         <button
           onClick={() => setActiveTab('pools')}
@@ -47,9 +43,10 @@ const MainContent: React.FC<MainContentProps> = ({
       {/* Tab Content */}
       {activeTab === 'pools' ? (
         <>
+          <BuyPanel />
           <section className="glow-section mb-8">
             <div className="snap-x snap-mandatory overflow-x-auto pb-2 -mx-1 px-1">
-              <TopPicks onJoinHackathon={onJoinHackathon} onApplyJob={onApplyJob} onJoinStakePool={onJoinStakePool} />
+              <TopPicks onApplyJob={onApplyJob} onJoinStakePool={onJoinStakePool} />
             </div>
           </section>
 
@@ -59,7 +56,7 @@ const MainContent: React.FC<MainContentProps> = ({
 
           <section className="glow-section mb-8">
             <div className="snap-x snap-mandatory overflow-x-auto pb-2 -mx-1 px-1">
-              <Hackathons onJoinHackathon={onJoinHackathon} />
+              <Hackathons />
             </div>
           </section>
 

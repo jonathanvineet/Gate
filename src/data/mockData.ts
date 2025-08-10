@@ -155,7 +155,12 @@ export const hackathons: Hackathon[] = [
     description: 'Build the next generation of decentralized applications using cutting-edge Web3 technologies.',
     deadline: '2025-02-15',
     difficulty: 'Intermediate',
-    tags: ['DeFi', 'NFTs', 'DAOs']
+    tags: ['DeFi', 'NFTs', 'DAOs'],
+    questions: [
+      { id: 'q1', label: 'What is your primary track?', type: 'single', options: ['DeFi', 'NFT', 'DAO'], required: true },
+      { id: 'q2', label: 'Team size', type: 'single', options: ['Solo', '2-3', '4+'] },
+      { id: 'q3', label: 'Brief idea description', type: 'text' }
+    ]
   },
   {
     id: '2',
@@ -165,7 +170,11 @@ export const hackathons: Hackathon[] = [
     description: 'Combine artificial intelligence with blockchain technology to solve real-world problems.',
     deadline: '2025-03-01',
     difficulty: 'Advanced',
-    tags: ['AI', 'Machine Learning', 'Smart Contracts']
+    tags: ['AI', 'Machine Learning', 'Smart Contracts'],
+    questions: [
+      { id: 'q1', label: 'AI experience level', type: 'single', options: ['Beginner', 'Intermediate', 'Advanced'], required: true },
+      { id: 'q2', label: 'Preferred tooling', type: 'multi', options: ['PyTorch', 'TensorFlow', 'LangChain', 'Other'] }
+    ]
   },
   {
     id: '3',
@@ -175,7 +184,10 @@ export const hackathons: Hackathon[] = [
     description: 'Perfect entry point for developers new to blockchain and Web3 development.',
     deadline: '2025-01-30',
     difficulty: 'Beginner',
-    tags: ['Education', 'Basics', 'Tutorials']
+    tags: ['Education', 'Basics', 'Tutorials'],
+    questions: [
+      { id: 'q1', label: 'Have you built on-chain before?', type: 'single', options: ['Yes', 'No'], required: true }
+    ]
   },
   {
     id: '4',

@@ -7,6 +7,7 @@ export interface StakeRecord {
   apy: string;
   userAddress?: string;
   transactionHash?: string;
+  category?: string; // e.g., 'stake' | 'unstake' | 'hackathon'
 }
 
 // Add new record type for unstaking
@@ -21,7 +22,7 @@ export interface UnstakeRecord {
 
 class CSVLogger {
   private readonly STORAGE_KEY = 'stake_activity_csv';
-  private readonly CSV_HEADERS = 'Date,Company Name,Pool Name,Amount,Token,APY,User Address,Transaction Hash';
+  private readonly CSV_HEADERS = 'Date,Company Name,Pool Name,Amount,Token,APY,User Address,Transaction Hash,Category';
 
   // Convert stake record to CSV row
   private recordToCSVRow(record: StakeRecord): string {
@@ -42,7 +43,8 @@ class CSVLogger {
       escapeCsvField(record.tokenSymbol),
       escapeCsvField(record.apy),
       escapeCsvField(record.userAddress),
-      escapeCsvField(record.transactionHash)
+      escapeCsvField(record.transactionHash),
+      escapeCsvField(record.category)
     ].join(',');
   }
 
@@ -50,7 +52,7 @@ class CSVLogger {
   private csvRowToRecord(row: string): StakeRecord | null {
     try {
       const fields = this.parseCSVRow(row);
-      if (fields.length < 6) return null;
+  if (fields.length < 6) return null;
 
       return {
         date: fields[0],
@@ -60,7 +62,8 @@ class CSVLogger {
         tokenSymbol: fields[4],
         apy: fields[5],
         userAddress: fields[6] || '',
-        transactionHash: fields[7] || ''
+  transactionHash: fields[7] || '',
+  category: fields[8] || ''
       };
     } catch (error) {
       console.error('Error parsing CSV row:', error);

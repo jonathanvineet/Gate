@@ -6,6 +6,7 @@ import StakeModal from './StakeModal';
 import VerificationModal from './VerificationModal';
 import { useVerification } from '../contexts/VerificationContext';
 import { EXPECTED_CHAIN_ID, STAKING_CONTRACT_ADDRESS, TOKEN_ADDRESS } from '../config/staking';
+import HackathonRegisterModal from './HackathonRegisterModal';
 
 interface TopPicksProps {
   onJoinStakePool?: (poolId: string) => void;
@@ -22,6 +23,8 @@ const TopPicks: React.FC<TopPicksProps> = ({
   const [showStakeModal, setShowStakeModal] = useState(false);
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
+  const [selectedHackathonId, setSelectedHackathonId] = useState<string | null>(null);
+  const [hackathonOpen, setHackathonOpen] = useState(false);
 
   const getTypeIcon = (type: string) => {
     switch (type) {
@@ -145,7 +148,11 @@ const TopPicks: React.FC<TopPicksProps> = ({
           if (onJoinStakePool) onJoinStakePool(pool.id);
         };
       case 'hackathon':
-        return onJoinHackathon ? () => onJoinHackathon(item.id) : undefined;
+        return () => {
+          setSelectedHackathonId(item.id);
+          setHackathonOpen(true);
+          if (onJoinHackathon) onJoinHackathon(item.id);
+        };
       case 'job':
         return onApplyJob ? () => onApplyJob(item.id) : undefined;
       default:
@@ -228,6 +235,15 @@ const TopPicks: React.FC<TopPicksProps> = ({
           }
         }}
       />
+
+      {/* Hackathon register modal */}
+      {selectedHackathonId && (
+        <HackathonRegisterModal
+          isOpen={hackathonOpen}
+          onClose={() => { setHackathonOpen(false); setSelectedHackathonId(null); }}
+          hackathonId={selectedHackathonId}
+        />
+      )}
     </section>
   );
 };
