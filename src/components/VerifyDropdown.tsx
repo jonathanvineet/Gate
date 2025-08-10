@@ -105,7 +105,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
     // Simulate document processing
     setTimeout(() => {
       if (selectedType === 'age') {
-        setMockDob('01-01-1990'); // Mock DOB for age verification
+        setMockDob('15-09-2005'); // Mock DOB for age verification
       } else if (selectedType === 'recruiter') {
         setMockCompanyInfo({
           companyName: 'TechCorp Solutions',
