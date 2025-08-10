@@ -1,15 +1,17 @@
 import React, { useState } from 'react';
-import { Plus, X, Coins, Code, Briefcase } from 'lucide-react';
+import { Plus, X, Coins, Code, Briefcase, Shield } from 'lucide-react';
 
 interface CreateDropdownProps {
   isConnected: boolean;
-  isVerified: boolean;
+  isAgeVerified: boolean;
+  isRecruiterVerified: boolean;
   onCreateSelect: (type: 'stake-pool' | 'hackathon' | 'job') => void;
 }
 
 const CreateDropdown: React.FC<CreateDropdownProps> = ({ 
-  isConnected, 
-  isVerified, 
+  isConnected,
+  isAgeVerified,
+  isRecruiterVerified,
   onCreateSelect 
 }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -19,12 +21,20 @@ const CreateDropdown: React.FC<CreateDropdownProps> = ({
     setIsOpen(false);
   };
 
-  if (!isConnected || !isVerified) {
+  if (!isConnected || !isAgeVerified) {
     return (
-      <button className="flex items-center gap-2 bg-gray-600 text-gray-300 px-4 py-2 rounded-lg cursor-not-allowed">
-        <Plus size={18} />
-        <span className="hidden sm:inline">Create</span>
-      </button>
+      <div className="relative">
+        <button className="flex items-center gap-2 bg-gray-600 text-gray-300 px-4 py-2 rounded-lg cursor-not-allowed">
+          <Plus size={18} />
+          <span className="hidden sm:inline">Create</span>
+        </button>
+        <div className="absolute top-full right-0 mt-1 text-xs text-gray-300 bg-gray-800 px-2 py-1 rounded shadow border border-gray-700">
+          <div className="flex items-center gap-1">
+            <Shield size={12} className="text-yellow-400" />
+            Age verification required
+          </div>
+        </div>
+      </div>
     );
   }
 
@@ -75,12 +85,19 @@ const CreateDropdown: React.FC<CreateDropdownProps> = ({
               </button>
 
               <button
-                onClick={() => handleSelect('job')}
-                className="w-full flex items-center gap-3 p-3 text-left hover:bg-gray-800 rounded-lg transition-colors group"
+                onClick={() => isRecruiterVerified && handleSelect('job')}
+                className={`w-full flex items-center gap-3 p-3 text-left rounded-lg transition-colors group ${isRecruiterVerified ? 'hover:bg-gray-800' : 'opacity-50 cursor-not-allowed'}`}
+                disabled={!isRecruiterVerified}
+                title={isRecruiterVerified ? undefined : 'Recruiter verification required'}
               >
                 <Briefcase className="text-green-600 group-hover:scale-110 transition-transform" size={20} />
                 <div>
-                  <div className="font-medium text-gray-100">Job</div>
+                  <div className="font-medium text-gray-100 flex items-center gap-2">
+                    Job
+                    {!isRecruiterVerified && (
+                      <span className="text-[10px] text-yellow-300 bg-yellow-900/30 border border-yellow-700 px-1 py-0.5 rounded">Recruiter required</span>
+                    )}
+                  </div>
                   <div className="text-sm text-gray-300">Post a job opening</div>
                 </div>
               </button>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Activity, Download, Trash2, TrendingUp, Building, Coins, Calendar, ChevronDown, ChevronUp, ExternalLink, Minus, RefreshCw } from 'lucide-react';
+import { Activity, Trash2, TrendingUp, Building, Coins, Calendar, ChevronDown, ChevronUp, ExternalLink, Minus, RefreshCw } from 'lucide-react';
 import { csvLogger, StakeRecord } from '../utils/csvLogger';
 import UnstakeModal from './UnstakeModal';
 import { stakingRecords } from '../utils/stakingRecords';
@@ -31,9 +31,9 @@ const ActivityDashboard: React.FC = () => {
   useEffect(() => {
     stakingRecords.initializeFromCSV();
     loadActivity();
-    const onUpdated = () => setRefreshTrigger(prev => prev + 1);
-    window.addEventListener('stake-records-updated', onUpdated as any);
-    return () => window.removeEventListener('stake-records-updated', onUpdated as any);
+  const onUpdated = () => setRefreshTrigger(prev => prev + 1);
+  window.addEventListener('stake-records-updated', onUpdated as EventListener);
+  return () => window.removeEventListener('stake-records-updated', onUpdated as EventListener);
   }, [refreshTrigger]);
 
   const loadActivity = () => {
@@ -48,9 +48,7 @@ const ActivityDashboard: React.FC = () => {
     setRefreshTrigger(prev => prev + 1);
   };
 
-  const handleDownloadCSV = () => {
-    csvLogger.downloadCSV(`stake_activity_${new Date().toISOString().split('T')[0]}.csv`);
-  };
+  // CSV export removed per request
 
   const handleClearActivity = () => {
     if (window.confirm('Are you sure you want to clear all activity records? This cannot be undone.')) {
@@ -228,13 +226,7 @@ const ActivityDashboard: React.FC = () => {
               Refresh
             </button>
             
-            <button
-              onClick={handleDownloadCSV}
-              className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors text-sm"
-            >
-              <Download size={16} />
-              Export CSV
-            </button>
+            {/* Export CSV removed */}
             
             <button
               onClick={handleClearActivity}

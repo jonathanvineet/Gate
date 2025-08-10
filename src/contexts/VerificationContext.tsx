@@ -1,15 +1,27 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
-interface VerificationState {
-  isVerified: boolean;
+type VerificationKind = 'age' | 'hackathon-creator' | 'recruiter';
+
+interface VerificationPerTypeState {
+  verified: boolean;
   verificationDate: string | null;
-  verificationType: 'age' | 'hackathon-creator' | 'recruiter' | null;
+}
+
+interface VerificationState {
+  // Backward-compatible fields (age-focused)
+  isVerified: boolean; // represents AGE verification for legacy checks
+  verificationDate: string | null; // date for AGE verification
+  verificationType: VerificationKind | null; // last verified type
+  // New per-type map
+  byType: Record<VerificationKind, VerificationPerTypeState>;
 }
 
 interface VerificationContextType {
   verificationState: VerificationState;
-  setVerified: (success: boolean, type?: 'age' | 'hackathon-creator' | 'recruiter') => void;
-  clearVerification: () => void;
+  setVerified: (success: boolean, type?: VerificationKind) => void;
+  clearVerification: (type?: VerificationKind) => void;
+  isTypeVerified: (type: VerificationKind) => boolean;
 }
 
 const VerificationContext = createContext<VerificationContextType | undefined>(undefined);
@@ -19,11 +31,16 @@ interface VerificationProviderProps {
 }
 
 export const VerificationProvider: React.FC<VerificationProviderProps> = ({ children }) => {
-  // Make sure the initial state doesn't auto-trigger verification
+  // Initial state with per-type map; legacy fields derive from age type
   const [verificationState, setVerificationState] = useState<VerificationState>({
     isVerified: false,
     verificationType: null,
-    verificationDate: null
+    verificationDate: null,
+    byType: {
+      age: { verified: false, verificationDate: null },
+      'hackathon-creator': { verified: false, verificationDate: null },
+      recruiter: { verified: false, verificationDate: null },
+    },
   });
 
   // Load verification state from sessionStorage on component mount
@@ -31,9 +48,29 @@ export const VerificationProvider: React.FC<VerificationProviderProps> = ({ chil
     const stored = sessionStorage.getItem('verification_state');
     if (stored) {
       try {
-        const parsedState = JSON.parse(stored);
-        console.log('🔍 VerificationProvider: Loading verification state from sessionStorage:', parsedState);
-        setVerificationState(parsedState);
+        const parsed = JSON.parse(stored);
+        console.log('🔍 VerificationProvider: Loading verification state from sessionStorage:', parsed);
+
+        // Migration: if old shape (no byType), convert to new
+        if (!parsed.byType) {
+          const byType: Record<VerificationKind, VerificationPerTypeState> = {
+            age: { verified: false, verificationDate: null },
+            'hackathon-creator': { verified: false, verificationDate: null },
+            recruiter: { verified: false, verificationDate: null },
+          };
+          const ageVerified = Boolean(parsed.isVerified);
+          const ageDate = parsed.verificationDate ?? null;
+          byType.age = { verified: ageVerified, verificationDate: ageDate };
+          const newState: VerificationState = {
+            isVerified: ageVerified,
+            verificationDate: ageDate,
+            verificationType: parsed.verificationType ?? (ageVerified ? 'age' : null),
+            byType,
+          };
+          setVerificationState(newState);
+        } else {
+          setVerificationState(parsed as VerificationState);
+        }
       } catch (error) {
         console.error('Error parsing verification state:', error);
         sessionStorage.removeItem('verification_state');
@@ -43,22 +80,26 @@ export const VerificationProvider: React.FC<VerificationProviderProps> = ({ chil
 
   // Save verification state to sessionStorage whenever it changes
   useEffect(() => {
-    if (verificationState.isVerified || verificationState.verificationDate) {
+    if (verificationState) {
       console.log('💾 VerificationProvider: Saving verification state to sessionStorage:', verificationState);
       sessionStorage.setItem('verification_state', JSON.stringify(verificationState));
     }
   }, [verificationState]);
 
-  const setVerified = (success: boolean, type: 'age' | 'hackathon-creator' | 'recruiter' = 'age') => {
+  const setVerified = (success: boolean, type: VerificationKind = 'age') => {
     console.log('🔐 VerificationProvider: setVerified called with:', { success, type });
-    
-    const newState: VerificationState = {
-      isVerified: success,
-      verificationDate: success ? new Date().toISOString() : null,
-      verificationType: success ? type : null
-    };
-    
-    setVerificationState(newState);
+    setVerificationState(prev => {
+      const next = { ...prev, byType: { ...prev.byType } } as VerificationState;
+      const date = success ? new Date().toISOString() : null;
+      next.byType[type] = { verified: success, verificationDate: date };
+      // Legacy fields mirror AGE only to keep gating behavior unchanged
+      if (type === 'age') {
+        next.isVerified = success;
+        next.verificationDate = date;
+      }
+      next.verificationType = success ? type : prev.verificationType;
+      return next;
+    });
     
     if (success) {
       // Dispatch custom event to notify all components
@@ -68,26 +109,43 @@ export const VerificationProvider: React.FC<VerificationProviderProps> = ({ chil
     }
   };
 
-  const clearVerification = () => {
-    console.log('🗑️ VerificationProvider: clearVerification called');
-    const newState: VerificationState = {
-      isVerified: false,
-      verificationDate: null,
-      verificationType: null
-    };
-    
-    setVerificationState(newState);
-    sessionStorage.removeItem('verification_state');
-    
-    // Dispatch custom event to notify all components
-    window.dispatchEvent(new CustomEvent('verificationCleared'));
+  const clearVerification = (type?: VerificationKind) => {
+    console.log('🗑️ VerificationProvider: clearVerification called', type ? `for ${type}` : '(all)');
+    setVerificationState(prev => {
+      if (!type) {
+        const cleared: VerificationState = {
+          isVerified: false,
+          verificationDate: null,
+          verificationType: null,
+          byType: {
+            age: { verified: false, verificationDate: null },
+            'hackathon-creator': { verified: false, verificationDate: null },
+            recruiter: { verified: false, verificationDate: null },
+          },
+        };
+        sessionStorage.removeItem('verification_state');
+        window.dispatchEvent(new CustomEvent('verificationCleared'));
+        return cleared;
+      }
+      const next = { ...prev, byType: { ...prev.byType } } as VerificationState;
+      next.byType[type] = { verified: false, verificationDate: null };
+      if (type === 'age') {
+        next.isVerified = false;
+        next.verificationDate = null;
+      }
+      window.dispatchEvent(new CustomEvent('verificationCleared', { detail: { type } }));
+      return next;
+    });
   };
+
+  const isTypeVerified = (type: VerificationKind) => Boolean(verificationState.byType?.[type]?.verified);
 
   return (
     <VerificationContext.Provider value={{
       verificationState,
       setVerified,
-      clearVerification
+      clearVerification,
+      isTypeVerified,
     }}>
       {children}
     </VerificationContext.Provider>

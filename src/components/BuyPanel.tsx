@@ -80,7 +80,7 @@ const BuyPanel: React.FC = () => {
         // Preload toToken metadata and balance if available
         if (toToken) {
           const erc20Abi = ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)', 'function symbol() view returns (string)'];
-          const token = new ethers.Contract(toToken, erc20Abi, provider as any);
+          const token = new ethers.Contract(toToken, erc20Abi, provider);
           const [rawBal, dec, sym] = await Promise.all([
             token.balanceOf(addr).catch(() => 0n),
             token.decimals().catch(() => 18),
@@ -91,7 +91,7 @@ const BuyPanel: React.FC = () => {
           setToDecimals(Number(dec));
           setToSymbol(String(sym));
         }
-      } catch (e) {
+      } catch {
         // ignore
       }
     };
@@ -123,7 +123,13 @@ const BuyPanel: React.FC = () => {
     };
     eth.on('chainChanged', handler);
     return () => {
-      try { eth.removeListener && eth.removeListener('chainChanged', handler); } catch {}
+      try {
+        if (eth && typeof eth.removeListener === 'function') {
+          eth.removeListener('chainChanged', handler);
+        }
+      } catch {
+        // ignore
+      }
     };
   }, [dex]);
 
@@ -135,7 +141,7 @@ const BuyPanel: React.FC = () => {
         const provider = await getEthersProvider();
         const erc20Abi = ['function decimals() view returns (uint8)', 'function symbol() view returns (string)'];
   const nAddr = await normalizeAddress(fromToken);
-  const token = new ethers.Contract(nAddr, erc20Abi, provider as any);
+  const token = new ethers.Contract(nAddr, erc20Abi, provider);
         const [dec, sym] = await Promise.all([
           token.decimals().catch(() => 18),
           token.symbol().catch(() => 'TOKEN'),
@@ -158,7 +164,7 @@ const BuyPanel: React.FC = () => {
         const provider = await getEthersProvider();
         const erc20Abi = ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)', 'function symbol() view returns (string)'];
   const nAddr = await normalizeAddress(toToken);
-  const token = new ethers.Contract(nAddr, erc20Abi, provider as any);
+  const token = new ethers.Contract(nAddr, erc20Abi, provider);
         const [rawBal, dec, sym] = await Promise.all([
           token.balanceOf(address).catch(() => 0n),
           token.decimals().catch(() => 18),
@@ -191,9 +197,10 @@ const BuyPanel: React.FC = () => {
   const q = await dex.getQuote({ chainId, chainIndex: ci, inTokenAddress: fromToken, outTokenAddress: toToken, amount: amountWei.toString(), slippageBps });
   const outDec = toDecimals || 18;
       setQuoteOut(ethers.formatUnits(q.amountOut, outDec));
-  setQuoteIsMock(!('raw' in q) || (q as any).raw == null);
-    } catch (e: any) {
-      setError(e?.message || 'Failed to get quote');
+  setQuoteIsMock(q.raw == null);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg || 'Failed to get quote');
       setQuoteOut('');
   setQuoteIsMock(true);
     } finally {
@@ -242,35 +249,37 @@ const BuyPanel: React.FC = () => {
       await tx.wait();
   // refresh toToken balance
   const erc20Abi = ['function balanceOf(address) view returns (uint256)', 'function decimals() view returns (uint8)'];
-  const token = new ethers.Contract(toToken, erc20Abi, provider as any);
+  const token = new ethers.Contract(toToken, erc20Abi, provider);
   const [rawBal, dec] = await Promise.all([token.balanceOf(user), token.decimals()]);
   setBalance(ethers.formatUnits(rawBal, Number(dec)));
-    } catch (e: any) {
-  setError(e?.reason || e?.message || 'Swap failed');
+    } catch (e: unknown) {
+  const maybe = (typeof e === 'object' && e !== null) ? (e as Record<string, unknown>) : undefined;
+  const msg = (maybe && typeof maybe.reason === 'string') ? maybe.reason : (e instanceof Error ? e.message : String(e));
+  setError(msg || 'Swap failed');
     } finally {
       setSwapBusy(false);
     }
   };
 
   return (
-    <div className="w-full bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10 mb-6">
+    <div className="w-full floating-card bg-black/80 rounded-xl p-6 border border-gray-800 accent-hover mb-6">
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-2">
           <Wallet className="text-white" size={18} />
           <h3 className="text-white font-semibold">Welcome{address ? `, ${address.slice(0,6)}...${address.slice(-4)}` : ''}</h3>
         </div>
         <div className="text-sm text-gray-300 flex items-center gap-3">
-          <span className="px-2 py-0.5 rounded bg-white/10 text-white/90" title={`chainId ${chainId}`}>{networkName(chainId)}</span>
-          <Coins size={14} className="text-green-400" />
+          <span className="px-2 py-1 rounded-full bg-black text-white" title={`chainId ${chainId}`}>{networkName(chainId)}</span>
+          <Coins size={14} className="text-white" />
           <span>Balance: <span className="text-white font-mono">{Number(balance).toFixed(4)} {toSymbol || 'TOKEN'}</span></span>
         </div>
       </div>
 
-      <div className="grid md:grid-cols-[1fr_auto_1fr_auto] grid-cols-1 gap-3 items-end">
+      <div className="grid md:grid-cols-[1fr_auto_1fr_auto] grid-cols-1 gap-4 items-end">
         <div>
           <label className="block text-xs text-gray-400 mb-1">From Token</label>
           <input
-            className="w-full px-3 py-2 rounded bg-black/70 border border-white/10 text-white"
+            className="w-full px-3 py-2 rounded bg-black border border-white/10 text-white"
             placeholder="0x... (USDC recommended)"
             value={fromToken}
             onChange={e => setFromToken(e.target.value)}
@@ -278,7 +287,7 @@ const BuyPanel: React.FC = () => {
           <div className="flex gap-2 mt-2">
             <button
               type="button"
-              className="text-xs px-2 py-1 border border-white/10 rounded text-white/80 hover:text-white"
+              className="text-xs px-2 py-1 border border-white/10 rounded text-white/80 hover:text-white bg-black"
                 disabled={dex.getChainIndex(chainId) == null}
                 onClick={() => {
                   const a = getQuickToken(chainId, 'usdc');
@@ -290,7 +299,7 @@ const BuyPanel: React.FC = () => {
             >USDC</button>
             <button
               type="button"
-              className="text-xs px-2 py-1 border border-white/10 rounded text-white/80 hover:text-white"
+              className="text-xs px-2 py-1 border border-white/10 rounded text-white/80 hover:text-white bg-black"
                 disabled={dex.getChainIndex(chainId) == null}
                 onClick={() => {
                   const a = getQuickToken(chainId, 'wnative');
@@ -320,7 +329,7 @@ const BuyPanel: React.FC = () => {
             type="number"
             min="0"
             step="0.0001"
-            className="w-full px-3 py-2 rounded bg-black/70 border border-white/10 text-white"
+            className="w-full px-3 py-2 rounded bg-black border border-white/10 text-white"
             placeholder="Enter amount"
             value={amount}
             onChange={e => setAmount(e.target.value)}
@@ -329,7 +338,7 @@ const BuyPanel: React.FC = () => {
             <input
               type="number"
               min={1}
-              className="ml-2 w-20 px-2 py-1 rounded bg-black/70 border border-white/10 text-white"
+              className="ml-2 w-20 px-2 py-1 rounded bg-black border border-white/10 text-white"
               value={slippageBps}
               onChange={e => setSlippageBps(Math.max(1, Number(e.target.value) || 50))}
             />
@@ -338,12 +347,12 @@ const BuyPanel: React.FC = () => {
 
         <div className="flex gap-2 mt-2 md:mt-0">
           <button
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded flex items-center gap-2"
+            className="px-4 py-2 bg-black hover:bg-gray-800 text-white rounded border border-white/10 flex items-center gap-2 accent-hover"
             disabled={quoteBusy}
             onClick={getQuote}
           >{quoteBusy ? (<><Loader className="animate-spin" size={14} /> Quote</>) : 'Get Quote'}</button>
           <button
-            className="px-4 py-2 bg-black hover:bg-gray-800 text-white rounded flex items-center gap-2 disabled:opacity-50"
+            className="px-4 py-2 bg-black hover:bg-gray-800 text-white rounded border border-white/10 flex items-center gap-2 disabled:opacity-50 accent-hover"
             disabled={swapBusy || !quoteOut || quoteIsMock}
             onClick={doSwap}
           >{swapBusy ? (<><Loader className="animate-spin" size={14} /> Swap</>) : 'Swap'}</button>

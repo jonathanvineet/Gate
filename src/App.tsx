@@ -7,6 +7,9 @@ import CreateForm from './pages/CreateForm';
 import Placeholder from './pages/Placeholder';
 import { VerificationProvider } from './contexts/VerificationContext';
 import { User } from './types';
+import StakeModal from './components/StakeModal';
+import { STAKING_CONTRACT_ADDRESS, TOKEN_ADDRESS, EXPECTED_CHAIN_ID } from './config/staking';
+import { createLogger } from './utils/createLogger';
 
 type AppState = 
   | 'dashboard' 
@@ -27,6 +30,8 @@ function App() {
   const [verificationType, setVerificationType] = useState<'age' | 'hackathon-creator' | 'recruiter'>('age');
   const [createType, setCreateType] = useState<'stake-pool' | 'hackathon' | 'job'>('stake-pool');
   const [placeholderData, setPlaceholderData] = useState({ title: '', message: '' });
+  const [pendingCreateData, setPendingCreateData] = useState<Record<string, unknown> | null>(null);
+  const [showDepositModal, setShowDepositModal] = useState(false);
 
   const handleWalletConnect = () => {
     setUser({
@@ -46,7 +51,9 @@ function App() {
     });
   };
 
-  const handleVerify = async (type: 'age' | 'hackathon-creator' | 'recruiter', proof?: File) => {
+  const handleVerify = async (type: 'age' | 'hackathon-creator' | 'recruiter', _proof?: File) => {
+    // mark as used to satisfy linter
+    void _proof;
     setVerificationType(type);
     setAppState('verification-result');
   };
@@ -56,27 +63,15 @@ function App() {
     setAppState('create-form');
   };
 
-  const handleCreateSubmit = (data: any) => {
-    const titles = {
-      'stake-pool': 'Stake Pool Created!',
-      'hackathon': 'Hackathon Created!',
-      'job': 'Job Posted!'
-    };
-    
-    const messages = {
-      'stake-pool': 'Your stake pool has been successfully created and is now live.',
-      'hackathon': 'Your hackathon has been posted and participants can now register.',
-      'job': 'Your job posting is now live and candidates can apply.'
-    };
-
-    setPlaceholderData({
-      title: titles[createType],
-      message: messages[createType]
-    });
-    setAppState('placeholder');
+  const handleCreateSubmit = (data: Record<string, unknown>) => {
+    // Save and prompt for a deposit via StakeModal (reuse flow)
+    setPendingCreateData(data);
+  setAppState('dashboard');
+    setShowDepositModal(true);
   };
 
-  const handleJoinAction = (type: string, id: string) => {
+  const handleJoinAction = (type: string, _id: string) => {
+    void _id;
     const titles = {
       'stake-pool': 'Staking Successful!',
       'hackathon': 'Registration Complete!',
@@ -100,10 +95,7 @@ function App() {
     setAppState('dashboard');
   };
 
-  const handleGetCredentials = () => {
-    // This function is no longer needed since VerifyDropdown handles it internally
-    console.log('Get credentials handled by VerifyDropdown');
-  };
+  // Credentials handled by VerifyDropdown
 
   if (appState === 'verification-result') {
     return (
@@ -169,6 +161,51 @@ function App() {
           onJoinStakePool={(id) => handleJoinAction('stake-pool', id)}
           onApplyJob={(id) => handleJoinAction('job', id)}
         />
+
+        {/* Deposit modal after Create submissions */}
+        {showDepositModal && (
+          <StakeModal
+            isOpen={showDepositModal}
+            onClose={() => setShowDepositModal(false)}
+      onSuccess={({ txHash, amount, tokenSymbol }) => {
+              // Log the creation and then show success placeholder
+              try {
+                createLogger.add({
+                  type: createType,
+                  form: pendingCreateData || {},
+                  userAddress: user.address,
+        txHash,
+        amount,
+        tokenSymbol,
+                });
+              } catch (e) { void e; }
+              const titles = {
+                'stake-pool': 'Stake Pool Created!',
+                'hackathon': 'Hackathon Created!',
+                'job': 'Job Posted!'
+              } as const;
+              const messages = {
+                'stake-pool': 'Your stake pool has been successfully created and is now live.',
+                'hackathon': 'Your hackathon has been posted and participants can now register.',
+                'job': 'Your job posting is now live and candidates can apply.'
+              } as const;
+              setPlaceholderData({
+                title: titles[createType],
+                message: messages[createType]
+              });
+              setShowDepositModal(false);
+              setAppState('placeholder');
+            }}
+            poolName={createType === 'job' ? (pendingCreateData?.title as string || 'Job Deposit') : (pendingCreateData?.name as string || 'Creation Deposit')}
+            poolId={`create-${createType}`}
+            minStake={(pendingCreateData?.deposit as string)?.toString?.() || (pendingCreateData?.minStake as string)?.toString?.() || '0'}
+            apy={'0%'}
+            requiredToken={{ symbol: 'TT', address: TOKEN_ADDRESS }}
+            requiredChainId={EXPECTED_CHAIN_ID}
+            stakingContractAddress={STAKING_CONTRACT_ADDRESS}
+            hackathonMode={createType === 'hackathon'}
+          />
+        )}
       </div>
     </VerificationProvider>
   );

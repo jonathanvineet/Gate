@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any, no-empty, react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef } from 'react';
 import { X, Coins, AlertTriangle, CheckCircle, ExternalLink, Loader, Shield } from 'lucide-react';
 import { useStakingContract } from '../hooks/useStakingContract';
@@ -10,6 +11,7 @@ import { getQuickToken } from '../config/quickTokens';
 interface StakeModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onSuccess?: (info: { txHash?: string; amount?: string; tokenSymbol?: string }) => void;
   poolName: string;
   poolId: string;
   minStake: string;
@@ -23,6 +25,7 @@ interface StakeModalProps {
 const StakeModal: React.FC<StakeModalProps> = ({
   isOpen,
   onClose,
+  onSuccess,
   poolName,
   poolId,
   minStake,
@@ -124,8 +127,12 @@ const StakeModal: React.FC<StakeModalProps> = ({
   useEffect(() => {
     if (showSuccess) {
       console.log('[StakeModal] success state entered; txHash=', stakingState.txHash);
+      try {
+        const txh2: string | undefined = stakingState.txHash ? String(stakingState.txHash) : undefined;
+        onSuccess?.({ txHash: txh2, amount: stakeAmount, tokenSymbol: stakingState.tokenInfo?.symbol || 'TT' });
+      } catch (e) { void e; }
     }
-  }, [showSuccess, stakingState.txHash]);
+  }, [showSuccess, stakingState.txHash, stakeAmount, onSuccess, stakingState.tokenInfo?.symbol]);
 
   // Detect network chainId for DEX
   useEffect(() => {
@@ -139,7 +146,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
             setWalletChainId(cid);
           }
         }
-      } catch {}
+      } catch (e) { void e; }
     };
     if (isOpen) detectChain();
   }, [isOpen]);
@@ -338,6 +345,12 @@ const StakeModal: React.FC<StakeModalProps> = ({
         console.warn('Auto-stake activity logging failed:', logErr);
       }
 
+      setShowSuccess(true);
+      try {
+        // prefer tx from local result when available
+        const txh = (res as { txHash?: string } | null)?.txHash || stakingState.txHash || undefined;
+        onSuccess?.({ txHash: txh, amount: stakeAmount, tokenSymbol: stakingState.tokenInfo?.symbol || 'TT' });
+      } catch (e) { void e; }
       setShowSuccess(true);
     } catch (e: any) {
       setAutoError(e?.message || 'Auto stake failed');
@@ -596,10 +609,10 @@ const StakeModal: React.FC<StakeModalProps> = ({
   const isTokenConfigured = stakingState.tokenInfo?.address && stakingState.tokenInfo.address !== '0x0000000000000000000000000000000000000000';
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-md mx-auto relative shadow-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[9999] flex items-center justify-center p-4">
+      <div className="bg-black rounded-2xl w-full max-w-md mx-auto relative shadow-2xl border border-white/10 max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="sticky top-0 bg-white border-b border-gray-200 p-6 rounded-t-2xl">
+  <div className="sticky top-0 bg-black/90 border-b border-white/10 p-6 rounded-t-2xl">
           <button
             onClick={onClose}
             className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 p-1"
@@ -610,21 +623,21 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
           <div className="text-center">
             <div className="flex items-center justify-center gap-2 mb-2">
-              <Coins className="text-purple-600" size={28} />
-              <h2 className="text-2xl font-bold text-gray-800">{hackathonMode ? 'Confirm Registration' : 'Stake Tokens'}</h2>
+              <Coins className="text-purple-400" size={28} />
+              <h2 className="text-2xl font-bold text-white">{hackathonMode ? 'Confirm Registration' : 'Stake Tokens'}</h2>
             </div>
-            <p className="text-gray-600 text-sm">{hackathonMode ? `Stake ${tokenSymbol} to register for ${poolName}` : `Stake ${tokenSymbol} in ${poolName}`}</p>
+            <p className="text-gray-400 text-sm">{hackathonMode ? `Stake ${tokenSymbol} to register for ${poolName}` : `Stake ${tokenSymbol} in ${poolName}`}</p>
           </div>
         </div>
 
         {/* Content */}
-        <div className="p-6">
+  <div className="p-6">
           {showSuccess && !!stakingState.txHash ? (
             <div className="space-y-4 text-center">
-              <CheckCircle className="text-green-500 mx-auto" size={64} />
+              <CheckCircle className="text-green-400 mx-auto" size={64} />
               <div>
-                <h3 className="text-lg font-semibold text-green-600 mb-2">{hackathonMode ? 'Registration Confirmed!' : 'Staking Successful!'}</h3>
-                <p className="text-gray-600 text-sm mb-4">
+                <h3 className="text-lg font-semibold text-green-400 mb-2">{hackathonMode ? 'Registration Confirmed!' : 'Staking Successful!'}</h3>
+                <p className="text-gray-300 text-sm mb-4">
                   {hackathonMode ? (
                     <>You have successfully staked {stakeAmount} {tokenSymbol} for {poolName}</>
                   ) : (
@@ -636,7 +649,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
                     href={getExplorerUrl(stakingState.txHash)}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center gap-1 text-blue-600 hover:text-blue-800 text-sm"
+                    className="inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 text-sm"
                   >
                     View Transaction <ExternalLink size={14} />
                   </a>
@@ -660,47 +673,47 @@ const StakeModal: React.FC<StakeModalProps> = ({
             <div className="space-y-6">
               {/* Optional: Swap with OKX DEX */}
               {(stakingState.tokenInfo?.address && stakingState.tokenInfo.address !== '0x0000000000000000000000000000000000000000') && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div className="bg-purple-900/10 border border-purple-500/20 rounded-lg p-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="font-semibold text-purple-800 mb-1">Swap with OKX DEX (optional)</h4>
-                      <p className="text-xs text-purple-700">Convert another token into {stakingState.tokenInfo?.symbol} before staking. If this pool requires a different token, swap accordingly.</p>
+                      <h4 className="font-semibold text-purple-300 mb-1">Swap with OKX DEX (optional)</h4>
+                      <p className="text-xs text-purple-200/80">Convert another token into {stakingState.tokenInfo?.symbol} before staking. If this pool requires a different token, swap accordingly.</p>
                     </div>
                     <button
                       onClick={() => setSwapOpen(v => !v)}
-                      className="text-purple-700 text-sm underline"
+                      className="text-purple-300 text-sm underline"
                     >{swapOpen ? 'Hide' : 'Show'}</button>
                   </div>
                   {swapOpen && (
                     <div className="mt-3 space-y-3 relative">
                       {(quoteBusy || swapBusy) && (
-                        <div className="absolute inset-0 bg-white/70 backdrop-blur-[1px] rounded-lg flex flex-col items-center justify-center z-10 border border-purple-200">
-                          <Loader className="animate-spin text-purple-700 mb-2" size={20} />
-                          <div className="text-sm text-purple-800 font-medium">
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-lg flex flex-col items-center justify-center z-10 border border-purple-700/30">
+                          <Loader className="animate-spin text-purple-300 mb-2" size={20} />
+                          <div className="text-sm text-purple-200 font-medium">
                             {swapBusy ? 'Waiting for wallet confirmation…' : 'Fetching best route…'}
                           </div>
                           {swapBusy && (
-                            <div className="text-[11px] text-purple-700 mt-1">Check your wallet popup and confirm the swap</div>
+                            <div className="text-[11px] text-purple-300 mt-1">Check your wallet popup and confirm the swap</div>
                           )}
                         </div>
                       )}
                       <div className="space-y-1">
-                        <label className="text-sm text-purple-800">DEX network</label>
+                        <label className="text-sm text-purple-200">DEX network</label>
                         <select
                           value={dexChainId}
                           onChange={e => setDexChainId(Number(e.target.value))}
-                          className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white text-gray-900 mb-2"
+                          className="w-full px-3 py-2 border border-purple-700/40 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-700/60 bg-black text-white mb-2"
                         >
                           <option value={137}>Polygon</option>
                           <option value={1}>Ethereum</option>
                           <option value={8453}>Base</option>
                         </select>
-                        <label className="text-sm text-purple-800">From token address (ERC20)</label>
+                        <label className="text-sm text-purple-200">From token address (ERC20)</label>
                         <input
                           value={fromTokenAddress}
                           onChange={e => { setFromTokenAddress(e.target.value); setFromTokenSymbol(''); setFromTokenDecimals(null); }}
                           placeholder="0x..."
-                          className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white text-gray-900"
+                          className="w-full px-3 py-2 border border-purple-700/40 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-700/60 bg-black text-white placeholder:text-gray-500"
                         />
                         <div className="flex items-center gap-2 mt-1">
                           {/* Quick-select tokens; now hardcoded per chain (incl. testnets) */}
@@ -712,7 +725,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
                               if (addr) setFromTokenAddress(addr);
                             }}
                             title="Wrapped native token for current network"
-                            className="text-[11px] px-2 py-1 border rounded bg-white text-purple-800 border-purple-200 hover:bg-purple-100"
+                            className="text-[11px] px-2 py-1 border rounded bg-black text-purple-300 border-purple-700/40 hover:bg-gray-900"
                           >{(() => { const cid = requiredChainId ?? CFG_CHAIN ?? walletChainId; return cid === 1 ? 'WETH' : cid === 137 ? 'WMATIC' : 'WNATIVE'; })()}</button>
                           <button
                             type="button"
@@ -722,34 +735,34 @@ const StakeModal: React.FC<StakeModalProps> = ({
                               if (addr) setFromTokenAddress(addr);
                             }}
                             title="USDC or stable token for current network"
-                            className="text-[11px] px-2 py-1 border rounded bg-white text-purple-800 border-purple-200 hover:bg-purple-100"
+                            className="text-[11px] px-2 py-1 border rounded bg-black text-purple-300 border-purple-700/40 hover:bg-gray-900"
                           >{(() => { const cid = requiredChainId ?? CFG_CHAIN ?? walletChainId; return `USDC${cid === 137 ? '.e' : ''}`; })()}</button>
                         </div>
                         {(fromTokenSymbol || fromTokenDecimals != null) && (
-                          <div className="text-[11px] text-purple-700 mt-1">{fromTokenSymbol || 'Token'} • {fromTokenDecimals ?? 18} decimals</div>
+                          <div className="text-[11px] text-purple-300 mt-1">{fromTokenSymbol || 'Token'} • {fromTokenDecimals ?? 18} decimals</div>
                         )}
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
-                          <label className="text-sm text-purple-800">From amount</label>
+                          <label className="text-sm text-purple-200">From amount</label>
                           <input
                             type="number"
                             min="0"
                             step="0.0001"
                             value={fromAmount}
                             onChange={e => setFromAmount(e.target.value)}
-                            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white text-gray-900"
+                            className="w-full px-3 py-2 border border-purple-700/40 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-700/60 bg-black text-white"
                           />
                         </div>
                         <div>
-                          <label className="text-sm text-purple-800">Slippage (bps)</label>
+                          <label className="text-sm text-purple-200">Slippage (bps)</label>
                           <input
                             type="number"
                             min="1"
                             step="1"
                             value={slippageBps}
                             onChange={e => setSlippageBps(Math.max(1, Number(e.target.value) || 50))}
-                            className="w-full px-3 py-2 border border-purple-300 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-400 bg-white text-gray-900"
+                            className="w-full px-3 py-2 border border-purple-700/40 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-700/60 bg-black text-white"
                           />
                         </div>
                       </div>
@@ -758,19 +771,19 @@ const StakeModal: React.FC<StakeModalProps> = ({
                           type="button"
                           onClick={handleGetQuote}
                           disabled={quoteBusy || !fromTokenAddress || !fromAmount}
-                          className="px-3 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:opacity-50 text-sm flex items-center gap-2"
+                          className="px-3 py-2 bg-purple-700 text-white rounded hover:bg-purple-600 disabled:opacity-50 text-sm flex items-center gap-2"
                         >{quoteBusy ? (<><Loader className="animate-spin" size={14} /> Getting quote...</>) : 'Get Quote'}</button>
                         {quoteOut && (
-                          <div className="text-sm text-purple-800">
+                          <div className="text-sm text-purple-200">
                             Est. receive: <span className="font-medium">{Number(quoteOut).toFixed(6)} {stakingState.tokenInfo?.symbol}</span>
                             {quoteIsMock && (
-                              <div className="text-[11px] text-orange-700 mt-1">Estimate only: DEX quote unavailable on this network</div>
+                              <div className="text-[11px] text-orange-300 mt-1">Estimate only: DEX quote unavailable on this network</div>
                             )}
                           </div>
                         )}
                       </div>
                       {swapError && (
-                        <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded p-2">{swapError}</div>
+                        <div className="text-xs text-red-300 bg-red-900/20 border border-red-700/30 rounded p-2">{swapError}</div>
                       )}
                       <div>
                         <button
@@ -779,12 +792,12 @@ const StakeModal: React.FC<StakeModalProps> = ({
                           disabled={swapBusy || !quoteOut || quoteIsMock || (walletChainId != null && dexChainId !== walletChainId)}
                           className="px-3 py-2 bg-black text-white rounded hover:bg-gray-800 disabled:opacity-50 text-sm flex items-center gap-2"
                         >{swapBusy ? (<><Loader className="animate-spin" size={14} /> Swapping...</>) : 'Execute Swap'}</button>
-                        <div className="text-[11px] text-purple-700 mt-2">After swap confirms, proceed to Approve and Stake below.</div>
+                        <div className="text-[11px] text-purple-300 mt-2">After swap confirms, proceed to Approve and Stake below.</div>
                         {quoteIsMock && (
-                          <div className="text-[11px] text-orange-700 mt-1">Swap execution disabled for mock quotes. Try a supported network or another DEX.</div>
+                          <div className="text-[11px] text-orange-300 mt-1">Swap execution disabled for mock quotes. Try a supported network or another DEX.</div>
                         )}
                         {(walletChainId != null && dexChainId !== walletChainId) && (
-                          <div className="text-[11px] text-orange-700 mt-1">Connect your wallet to the same network as the DEX selection to execute swaps.</div>
+                          <div className="text-[11px] text-orange-300 mt-1">Connect your wallet to the same network as the DEX selection to execute swaps.</div>
                         )}
                       </div>
                     </div>
@@ -793,14 +806,14 @@ const StakeModal: React.FC<StakeModalProps> = ({
               )}
               {/* Network Issue Warning */}
               {isNetworkIssue && (
-                <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
+                <div className="bg-orange-900/10 border border-orange-700/30 rounded-lg p-4">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="text-orange-600 mt-0.5 flex-shrink-0" size={20} />
-                    <div className="text-sm text-orange-800">
+                    <AlertTriangle className="text-orange-400 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="text-sm text-orange-200">
                       <p className="font-medium mb-2">Network Connectivity Issues</p>
                       <p className="mb-2">The app is experiencing network connectivity problems. Using mock data for testing purposes.</p>
-                      <div className="bg-blue-50 border border-blue-200 rounded p-2 mt-2">
-                        <p className="text-xs text-blue-800">
+                      <div className="bg-blue-900/10 border border-blue-700/30 rounded p-2 mt-2">
+                        <p className="text-xs text-blue-200">
                           <strong>Troubleshooting:</strong> Try switching to a different network in OKX Wallet, or use a different RPC endpoint for your current network.
                         </p>
                       </div>
@@ -811,14 +824,14 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Contract Implementation Error */}
               {isInvalidContract && !isNetworkIssue && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-lg p-4">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="text-yellow-600 mt-0.5 flex-shrink-0" size={20} />
-                    <div className="text-sm text-yellow-800">
+                    <AlertTriangle className="text-yellow-400 mt-0.5 flex-shrink-0" size={20} />
+                    <div className="text-sm text-yellow-200">
                       <p className="font-medium mb-2">Invalid Token Contract</p>
                       <p className="mb-2">The token contract doesn't implement the ERC20 standard correctly. Using mock data for testing.</p>
-                      <div className="bg-gray-50 border border-gray-200 rounded p-2 mt-2">
-                        <p className="text-xs text-gray-800">
+                      <div className="bg-gray-900/40 border border-gray-700/40 rounded p-2 mt-2">
+                        <p className="text-xs text-gray-200">
                           <strong>For developers:</strong> Please verify the token contract's implementation and ensure it follows the ERC20 standard.
                         </p>
                       </div>
@@ -829,14 +842,14 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Token Configuration Error - Only show if not a network or contract issue */}
               {(tokenLoadError || !isTokenConfigured) && !isNetworkIssue && !isInvalidContract && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-900/10 border border-red-700/30 rounded-lg p-4">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={20} />
+                    <AlertTriangle className="text-red-400 mt-0.5 flex-shrink-0" size={20} />
                     <div className="text-sm text-red-800">
-                      <p className="font-medium mb-2">Contract Configuration Issue</p>
-                      <p className="mb-2">The staking contract needs to be configured with a token address.</p>
-                      <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-                        <p className="text-xs text-yellow-800">
+                      <p className="font-medium mb-2 text-red-200">Contract Configuration Issue</p>
+                      <p className="mb-2 text-red-200/90">The staking contract needs to be configured with a token address.</p>
+                      <div className="bg-yellow-900/10 border border-yellow-700/30 rounded p-2">
+                        <p className="text-xs text-yellow-200">
                           <strong>For developers:</strong> Deploy an ERC20 token contract first, then update the staking contract.
                         </p>
                       </div>
@@ -846,42 +859,42 @@ const StakeModal: React.FC<StakeModalProps> = ({
               )}
 
               {/* Pool Info */}
-              <div className="bg-gray-50 rounded-lg p-4 space-y-2">
-                <h3 className="font-semibold text-gray-800 mb-3">{hackathonMode ? 'Registration Details' : 'Pool Information'}</h3>
+              <div className="bg-white/5 backdrop-blur-sm rounded-lg p-4 space-y-2 border border-white/10">
+                <h3 className="font-semibold text-white mb-3">{hackathonMode ? 'Registration Details' : 'Pool Information'}</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Pool Name:</span>
-                    <span className="font-medium">{poolName}</span>
+                    <span className="text-gray-300">Pool Name:</span>
+                    <span className="font-medium text-white">{poolName}</span>
                   </div>
                   <div className="flex justify-between">
                     {!hackathonMode ? (
                       <>
-                        <span className="text-gray-600">APY:</span>
-                        <span className="font-medium text-green-600">{apy}</span>
+                        <span className="text-gray-300">APY:</span>
+                        <span className="font-medium text-green-400">{apy}</span>
                       </>
                     ) : (
                       <>
-                        <span className="text-gray-600">Category:</span>
-                        <span className="font-medium text-purple-600">Hackathon</span>
+                        <span className="text-gray-300">Category:</span>
+                        <span className="font-medium text-purple-300">Hackathon</span>
                       </>
                     )}
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Minimum Stake:</span>
-                    <span className="font-medium">{minStake}</span>
+                    <span className="text-gray-300">Minimum Stake:</span>
+                    <span className="font-medium text-white">{minStake}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Token:</span>
-                    <span className="font-medium">{tokenName} ({tokenSymbol})</span>
+                    <span className="text-gray-300">Token:</span>
+                    <span className="font-medium text-white">{tokenName} ({tokenSymbol})</span>
                   </div>
                   {(isTokenConfigured || isNetworkIssue || isInvalidContract) && (
                     <div className="flex justify-between">
-                      <span className="text-gray-600">{hackathonMode ? 'Total Registration Stake:' : 'Total Staked:'}</span>
-                      <span className="font-medium text-blue-600">{parseFloat(totalStaked).toFixed(2)} {tokenSymbol}</span>
+                      <span className="text-gray-300">{hackathonMode ? 'Total Registration Stake:' : 'Total Staked:'}</span>
+                      <span className="font-medium text-blue-300">{parseFloat(totalStaked).toFixed(2)} {tokenSymbol}</span>
                     </div>
                   )}
           {(isNetworkIssue || isInvalidContract) && (
-                    <div className="text-xs text-orange-600 mt-2">
+                    <div className="text-xs text-orange-300 mt-2">
             * {hackathonMode ? 'Using mock data for registration on this network' : 'Using mock data due to network or contract issues'}
                     </div>
                   )}
@@ -890,38 +903,38 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Auto-stake stepper */}
               {autoBusy && (
-                <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
-                  <h4 className="font-medium text-purple-800 mb-2">Auto Stake Progress</h4>
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-4">
+                  <h4 className="font-medium text-white mb-2">Auto Stake Progress</h4>
                   <ul className="space-y-2 text-sm">
                     {steps.map(s => (
                       <li key={s.key} className="flex items-start gap-2">
-                        {s.status === 'running' && <Loader className="animate-spin text-purple-700 mt-0.5" size={14} />}
-                        {s.status === 'done' && <CheckCircle className="text-green-600 mt-0.5" size={16} />}
-                        {s.status === 'error' && <AlertTriangle className="text-red-600 mt-0.5" size={16} />}
-                        {s.status === 'skipped' && <span className="mt-0.5 text-purple-700">•</span>}
+                        {s.status === 'running' && <Loader className="animate-spin text-purple-300 mt-0.5" size={14} />}
+                        {s.status === 'done' && <CheckCircle className="text-green-400 mt-0.5" size={16} />}
+                        {s.status === 'error' && <AlertTriangle className="text-red-400 mt-0.5" size={16} />}
+                        {s.status === 'skipped' && <span className="mt-0.5 text-purple-300">•</span>}
                         <div>
-                          <div className="font-medium text-gray-800">{s.label}</div>
-                          {s.detail && <div className="text-xs text-gray-600">{s.detail}</div>}
+                          <div className="font-medium text-white">{s.label}</div>
+                          {s.detail && <div className="text-xs text-gray-300">{s.detail}</div>}
                         </div>
                       </li>
                     ))}
                   </ul>
-                  {autoError && <div className="text-xs text-red-600 mt-2">{autoError}</div>}
+                  {autoError && <div className="text-xs text-red-300 mt-2">{autoError}</div>}
                 </div>
               )}
 
               {/* User Balance Info */}
               {stakingState.tokenInfo && (isTokenConfigured || isNetworkIssue || isInvalidContract) && (
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <h4 className="font-medium text-blue-800 mb-2">Your Wallet {(isNetworkIssue || isInvalidContract) && '(Mock Data)'}</h4>
+                <div className="bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg p-4">
+                  <h4 className="font-medium text-white mb-2">Your Wallet {(isNetworkIssue || isInvalidContract) && '(Mock Data)'}</h4>
                   <div className="space-y-2 text-sm">
                     <div className="flex justify-between">
-                      <span className="text-blue-700">Balance:</span>
-                      <span className="font-medium text-blue-800">{parseFloat(userBalance).toFixed(4)} {tokenSymbol}</span>
+                      <span className="text-gray-300">Balance:</span>
+                      <span className="font-medium text-white">{parseFloat(userBalance).toFixed(4)} {tokenSymbol}</span>
                     </div>
                     <div className="flex justify-between">
-                      <span className="text-blue-700">Allowance:</span>
-                      <span className="font-medium text-blue-800">{parseFloat(allowance).toFixed(4)} {tokenSymbol}</span>
+                      <span className="text-gray-300">Allowance:</span>
+                      <span className="font-medium text-white">{parseFloat(allowance).toFixed(4)} {tokenSymbol}</span>
                     </div>
                   </div>
                 </div>
@@ -930,7 +943,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
               {/* Stake Amount Input */}
               <div className="space-y-3">
                 <label className="block">
-                  <span className="text-sm font-medium text-gray-700 mb-2 block">
+                  <span className="text-sm font-medium text-gray-200 mb-2 block">
                     Stake Amount ({tokenSymbol})
                   </span>
                   <input
@@ -938,14 +951,14 @@ const StakeModal: React.FC<StakeModalProps> = ({
                     value={stakeAmount}
                     onChange={(e) => setStakeAmount(e.target.value)}
                     placeholder="Enter amount to stake"
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-lg"
+                    className="w-full px-4 py-3 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-600 focus:border-transparent text-lg bg-black text-white placeholder:text-gray-500"
                     disabled={stakingState.isLoading || (!isTokenConfigured && !isNetworkIssue && !isInvalidContract)}
                     step="0.001"
                     min="0"
                     max={userBalance}
                   />
                 </label>
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-400">
                   {(isTokenConfigured || isNetworkIssue || isInvalidContract) 
                     ? `Available: ${parseFloat(userBalance).toFixed(4)} ${tokenSymbol}${(isNetworkIssue || isInvalidContract) ? ' (mock)' : ''}` 
                     : 'Token contract not configured'
@@ -955,10 +968,10 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Approval Warning */}
               {needsApproval && stakeAmount && isTokenConfigured && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
+        <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-lg p-3">
                   <div className="flex items-start gap-2">
-                    <Shield className="text-yellow-600 mt-0.5" size={16} />
-                    <div className="text-sm text-yellow-800">
+          <Shield className="text-yellow-400 mt-0.5" size={16} />
+          <div className="text-sm text-yellow-200">
                       <p className="font-medium mb-1">Token Approval Required</p>
                       <p>You need to approve {stakeAmount} {tokenSymbol} tokens before staking</p>
                     </div>
@@ -968,12 +981,12 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Enhanced Error Display */}
               {stakingState.error && (
-                <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+                <div className="bg-red-900/10 border border-red-700/30 rounded-lg p-4">
                   <div className="flex items-start gap-2">
-                    <AlertTriangle className="text-red-600 mt-0.5 flex-shrink-0" size={20} />
+                    <AlertTriangle className="text-red-400 mt-0.5 flex-shrink-0" size={20} />
                     <div className="flex-1">
-                      <p className="text-red-800 text-sm font-medium mb-2">Transaction Failed</p>
-                      <p className="text-red-700 text-sm mb-3">{stakingState.error}</p>
+                      <p className="text-red-300 text-sm font-medium mb-2">Transaction Failed</p>
+                      <p className="text-red-200 text-sm mb-3">{stakingState.error}</p>
                       {(stakingState.error.includes('Network') || stakingState.error.includes('RPC')) && (
                         <div className="space-y-2">
                           {isRetrying ? (
@@ -984,26 +997,26 @@ const StakeModal: React.FC<StakeModalProps> = ({
                           ) : retryCount < 3 ? (
                             <button
                               onClick={handleRetry}
-                              className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded transition-colors"
+                              className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded transition-colors"
                             >
                               Retry Transaction
                             </button>
                           ) : null}
-                          <div className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                            <p className="font-medium mb-1">Troubleshooting Tips:</p>
+                          <div className="text-xs text-gray-300 bg-white/5 border border-white/10 p-2 rounded">
+                            <p className="font-medium mb-1 text-white">Troubleshooting Tips:</p>
                             <ul className="space-y-1">
-                              <li>• Check your internet connection</li>
-                              <li>• Try switching to a different RPC endpoint</li>
-                              <li>• Increase gas price in your wallet</li>
-                              <li>• Wait for network congestion to decrease</li>
+                              <li className="text-gray-300">• Check your internet connection</li>
+                              <li className="text-gray-300">• Try switching to a different RPC endpoint</li>
+                              <li className="text-gray-300">• Increase gas price in your wallet</li>
+                              <li className="text-gray-300">• Wait for network congestion to decrease</li>
                             </ul>
                           </div>
                         </div>
                       )}
                       {stakingState.error.includes('gas') && (
-                        <div className="text-xs text-gray-600 bg-yellow-50 p-2 rounded border border-yellow-200">
-                          <p className="font-medium text-yellow-800 mb-1">Gas Issue Tips:</p>
-                          <ul className="space-y-1 text-yellow-700">
+                        <div className="text-xs text-yellow-200 bg-yellow-900/10 p-2 rounded border border-yellow-700/30">
+                          <p className="font-medium text-yellow-300 mb-1">Gas Issue Tips:</p>
+                          <ul className="space-y-1 text-yellow-200">
                             <li>• Ensure you have enough ETH for gas fees</li>
                             <li>• Try increasing gas limit in your wallet</li>
                             <li>• Wait for lower network congestion</li>
@@ -1017,14 +1030,14 @@ const StakeModal: React.FC<StakeModalProps> = ({
 
               {/* Transaction Hash */}
               {stakingState.txHash && !showSuccess && (
-                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3">
-                  <p className="text-yellow-800 text-sm">
+                <div className="bg-yellow-900/10 border border-yellow-700/30 rounded-lg p-3">
+                  <p className="text-yellow-200 text-sm">
                     Transaction sent: 
                     <a
                       href={getExplorerUrl(stakingState.txHash)}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="ml-1 text-blue-600 hover:underline"
+                      className="ml-1 text-blue-300 hover:underline"
                     >
                       {stakingState.txHash.slice(0, 10)}...
                     </a>
@@ -1036,11 +1049,11 @@ const StakeModal: React.FC<StakeModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="sticky bottom-0 bg-white border-t border-gray-200 p-6 rounded-b-2xl">
+        <div className="sticky bottom-0 bg-black/90 border-t border-white/10 p-6 rounded-b-2xl">
           <div className="flex gap-3">
             <button
               onClick={onClose}
-              className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors font-medium"
+              className="flex-1 px-4 py-3 border border-white/10 text-gray-200 rounded-lg hover:bg-white/5 transition-colors font-medium"
               disabled={stakingState.isLoading || isRetrying}
             >
               Cancel
@@ -1049,7 +1062,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
             <button
               onClick={autoStake}
               disabled={autoBusy || stakingState.isLoading || isRetrying || !stakeAmount || parseFloat(stakeAmount) <= 0}
-              className="flex-1 px-4 py-3 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
+              className="flex-1 px-4 py-3 bg-white text-black rounded-lg hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
             >
               {autoBusy ? (<><Loader className="animate-spin" size={16} /> Auto Staking...</>) : 'Auto Stake'}
             </button>
@@ -1057,7 +1070,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
             {(!isTokenConfigured && !isNetworkIssue && !isInvalidContract) ? (
               <button
                 disabled={true}
-                className="flex-1 px-4 py-3 bg-gray-400 text-white rounded-lg cursor-not-allowed font-medium"
+                className="flex-1 px-4 py-3 bg-gray-700 text-white rounded-lg cursor-not-allowed font-medium"
               >
                 Contract Not Ready
               </button>
@@ -1065,7 +1078,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
               <button
                 onClick={handleApprove}
                 disabled={stakingState.isLoading || !stakeAmount || parseFloat(stakeAmount) <= 0}
-                className="flex-1 px-4 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
+                className="flex-1 px-4 py-3 bg-yellow-600 text-white rounded-lg hover:bg-yellow-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
               >
                 {stakingState.isLoading ? (
                   <>
@@ -1086,7 +1099,7 @@ const StakeModal: React.FC<StakeModalProps> = ({
                   parseFloat(stakeAmount) <= 0 || 
                   (parseFloat(stakeAmount) > parseFloat(userBalance) && !isNetworkIssue && !isInvalidContract)
                 }
-                className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
+                className="flex-1 px-4 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center justify-center gap-2 font-medium"
               >
                 {stakingState.isLoading || isRetrying ? (
                   <>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Zap } from 'lucide-react';
+import { Crown, Shield } from 'lucide-react';
 import VerifyDropdown from './VerifyDropdown';
 import CreateDropdown from './CreateDropdown';
 import WalletConnection from './WalletConnection';
@@ -15,7 +15,6 @@ interface HeaderProps {
   onWalletDisconnect: () => void;
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
   onCreateSelect: (type: 'stake-pool' | 'hackathon' | 'job') => void;
-  onOpenDexPlayground?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -23,21 +22,20 @@ const Header: React.FC<HeaderProps> = ({
   onWalletConnect,
   onWalletDisconnect,
   onVerify,
-  onCreateSelect,
-  onOpenDexPlayground
+  onCreateSelect
 }) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [selectedVerificationType, setSelectedVerificationType] = useState<'age' | 'hackathon-creator' | 'recruiter'>('age');
-  const { verificationState, setVerified, clearVerification } = useVerification();
+  const { verificationState, setVerified, clearVerification, isTypeVerified } = useVerification();
 
   const handleVerificationClick = (type: 'age' | 'hackathon-creator' | 'recruiter') => {
-    if (!verificationState.isVerified) {
+    if (!isTypeVerified(type)) {
       setSelectedVerificationType(type);
       setIsVerificationModalOpen(true);
     }
   };
 
-  const handleVerificationComplete = (success: boolean, details?: any) => {
+  const handleVerificationComplete = (success: boolean, details?: unknown) => {
     if (success) {
       setVerified(true, selectedVerificationType);
       console.log('Header: Verification successful - global state updated!', details);
@@ -62,26 +60,23 @@ const Header: React.FC<HeaderProps> = ({
           <div className="flex justify-between items-center h-16">
             {/* Logo */}
             <div className="flex items-center gap-3">
-              <div className="bg-black p-2 rounded-xl">
-                <Zap className="text-white" size={24} />
+              <div className="bg-black p-2 rounded-xl relative">
+                  <Crown className="text-white" size={24} />
+                  <Shield className="text-white/80 absolute -right-1 -bottom-1" size={12} />
               </div>
-              <h1 className="text-2xl font-bold accent-gradient-text">CryptoSpace</h1>
+              <h1 className="text-2xl font-bold accent-gradient-text">CheqMate</h1>
             </div>
 
             {/* Navigation Buttons */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 md:gap-4 flex-wrap md:flex-nowrap justify-end">
               {/* Verify Dropdown */}
-              <VerifyAgeDropdown
-                isVerified={verificationState.isVerified}
-                verificationDate={verificationState.verificationDate}
-                onVerificationClick={handleVerificationClick}
-              />
+              <VerifyAgeDropdown onVerificationClick={handleVerificationClick} />
 
               {/* Development Debug Button */}
               {process.env.NODE_ENV === 'development' && verificationState.isVerified && (
                 <button
                   onClick={handleClearVerification}
-                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors"
+                  className="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded transition-colors hidden sm:inline-flex"
                   title="Clear verification (dev only)"
                 >
                   Clear
@@ -99,7 +94,8 @@ const Header: React.FC<HeaderProps> = ({
               <div className="accent-hover rounded-lg focus-ring">
                 <CreateDropdown
                 isConnected={user.isConnected}
-                isVerified={verificationState.isVerified}
+                isAgeVerified={isTypeVerified('age')}
+                isRecruiterVerified={isTypeVerified('recruiter')}
                 onCreateSelect={onCreateSelect}
                 />
               </div>
@@ -110,15 +106,7 @@ const Header: React.FC<HeaderProps> = ({
                 onDisconnect={onWalletDisconnect}
               />
 
-              {process.env.NODE_ENV === 'development' && (
-                <button
-                  onClick={() => onOpenDexPlayground && onOpenDexPlayground()}
-                  className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
-                  title="DEX API Playground (dev only)"
-                >
-                  DEX API
-                </button>
-              )}
+              {/* DEX API button removed per request */}
             </div>
           </div>
         </div>

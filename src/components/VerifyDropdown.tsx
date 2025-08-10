@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Shield, ChevronDown, Download, Calendar, Trophy, Briefcase, CheckCircle, Upload, X, Loader2, AlertCircle } from 'lucide-react';
+import { ChevronDown, Download, Calendar, Trophy, Briefcase, Upload, X, Loader2, AlertCircle, CheckCircle } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface VerifyDropdownProps {
@@ -10,8 +10,7 @@ interface VerifyDropdownProps {
 
 const VerifyDropdown: React.FC<VerifyDropdownProps> = ({ 
   isConnected, 
-  isVerified, 
-  onVerify
+  isVerified
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selectedType, setSelectedType] = useState<'age' | 'hackathon-creator' | 'recruiter' | null>(null);
@@ -22,6 +21,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
   const [showCorsHelp, setShowCorsHelp] = useState(false);
   const [qrUrl, setQrUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [verifyingRecruiter, setVerifyingRecruiter] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // DIDs and constants
@@ -63,6 +63,16 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
     console.log('Verification selected for type:', type);
     setSelectedType(type);
     // Don't close the dropdown, show the upload interface
+  };
+
+  // Recruiter wallet verification mock flow
+  const handleOpenWalletRecruiter = () => {
+    setVerifyingRecruiter(true);
+    // Simulate wallet verification delay
+    setTimeout(() => {
+      setMockCompanyInfo({ companyName: 'TechCorp Solutions', employeeId: 'EMP001234' });
+      setVerifyingRecruiter(false);
+    }, 2000);
   };
 
   const handleFileUpload = (file: File) => {
@@ -218,7 +228,7 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
     await createCredential(payload, 'hackathon-creator');
   };
 
-  const createCredential = async (payload: any, type: string) => {
+  const createCredential = async (payload: unknown, type: 'age' | 'hackathon-creator' | 'recruiter') => {
     try {
       console.log(`Creating ${type} credential with payload:`, payload);
       const encodedIssuerDID = encodeURIComponent(ISSUER_DID);
@@ -267,14 +277,15 @@ const VerifyDropdown: React.FC<VerifyDropdownProps> = ({
       } else {
         throw new Error("No universalLink found in response");
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("API call failed:", error);
-      
-      if (error instanceof TypeError && error.message.includes('Failed to fetch')) {
+      const isTypeErr = error instanceof TypeError;
+      const msg = error instanceof Error ? error.message : String(error);
+      if (isTypeErr && msg.includes('Failed to fetch')) {
         setShowCorsHelp(true);
         showManualCurlCommands(type);
       } else {
-        alert(`API call failed: ${error.message}`);
+        alert(`API call failed: ${msg}`);
       }
     }
   };
@@ -396,7 +407,7 @@ Curl command: ${offerCurl}`);
       if (universalLink) {
         handleUniversalLink(universalLink);
       }
-    } catch (error) {
+  } catch {
       const universalLink = prompt(`Run this curl command and paste the universalLink here:\n\n${offerCurl}`);
       if (universalLink) {
         handleUniversalLink(universalLink);
@@ -420,7 +431,7 @@ Curl command: ${offerCurl}`);
       try {
         await navigator.clipboard.writeText(universalLink);
         alert("Universal link copied to clipboard!");
-      } catch (error) {
+      } catch {
         alert(`Universal link: ${universalLink}`);
       }
     }
@@ -443,6 +454,7 @@ Curl command: ${offerCurl}`);
         setProofFile(null);
         setMockDob(null);
         setMockCompanyInfo(null);
+  setVerifyingRecruiter(false);
       }
     };
 
@@ -458,7 +470,7 @@ Curl command: ${offerCurl}`);
         disabled
         className="px-4 py-2 rounded-md bg-gray-600 text-gray-400 cursor-not-allowed flex items-center gap-2 font-semibold"
       >
-        <Shield size={16} />
+  <Briefcase size={16} />
         Credentials
       </button>
     );
@@ -474,8 +486,8 @@ Curl command: ${offerCurl}`);
             : 'bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white shadow-lg shadow-orange-500/25'
         }`}
       >
-        <Shield size={16} />
-        {isVerified ? 'Get Credentials' : 'Verify'}
+  <Briefcase size={16} />
+  Credentials
         <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
       {isOpen && (
@@ -500,10 +512,10 @@ Curl command: ${offerCurl}`);
               {!selectedType ? (
                 <div className="space-y-2">
                   <div className="text-sm font-semibold text-gray-300 mb-3">Choose Verification Type</div>
-                  {verificationOptions.map((option) => (
+          {verificationOptions.map((option) => (
                     <button
                       key={option.id}
-                      onClick={() => handleVerificationSelect(option.id as any)}
+            onClick={() => handleVerificationSelect(option.id as 'age' | 'hackathon-creator' | 'recruiter')}
                       className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3 text-gray-100 rounded-lg"
                     >
                       {option.icon}
@@ -513,67 +525,108 @@ Curl command: ${offerCurl}`);
                 </div>
               ) : (
                 <div className="space-y-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-200 mb-2">
-                      Upload Proof Document
-                    </label>
-                    <div
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                      className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
-                        isDragOver 
-                          ? 'border-purple-400 bg-purple-900/30' 
-                          : 'border-gray-700 hover:border-purple-400'
-                      }`}
-                    >
-                      <Upload className="mx-auto h-12 w-12 text-gray-400 mb-2" />
-                      <p className="text-sm text-gray-300 mb-2">
-                        Drag and drop your document here, or
-                      </p>
-                      <input
-                        type="file"
-                        id="file-upload"
-                        onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
-                        className="hidden"
-                        accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
-                      />
-                      <label
-                        htmlFor="file-upload"
-                        className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors"
-                      >
-                        Choose File
-                      </label>
-                      {proofFile && (
-                        <p className="mt-2 text-sm text-green-400">
-                          ✓ {proofFile.name}
-                        </p>
+                  {selectedType === 'recruiter' ? (
+                    <div className="space-y-4">
+                      {!verifyingRecruiter && !mockCompanyInfo && (
+                        <>
+                          <p className="text-sm text-gray-300">Verify your recruiter identity with your wallet.</p>
+                          <button
+                            onClick={handleOpenWalletRecruiter}
+                            className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 flex items-center justify-center gap-2"
+                          >
+                            Open Wallet
+                          </button>
+                        </>
                       )}
+                      {verifyingRecruiter && (
+                        <div className="flex items-center justify-center gap-2 text-gray-200">
+                          <Loader2 className="animate-spin" size={20} />
+                          Verifying identity...
+                        </div>
+                      )}
+                      {!verifyingRecruiter && mockCompanyInfo && (
+                        <div className="flex items-center justify-center gap-2 text-green-400">
+                          <CheckCircle size={18} />
+                          Verified
+                        </div>
+                      )}
+                      <button
+                        onClick={() => {
+                          setSelectedType(null);
+                          setProofFile(null);
+                          setMockCompanyInfo(null);
+                          setVerifyingRecruiter(false);
+                        }}
+                        className="w-full text-gray-400 hover:text-gray-200 py-2 text-sm"
+                      >
+                        ← Back to verification types
+                      </button>
                     </div>
-                  </div>
-                  <button
-                    onClick={handleVerify}
-                    disabled={!proofFile || isLoading}
-                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                  >
-                    {isLoading ? (
-                      <>
-                        <Loader2 className="animate-spin" size={20} />
-                        Processing Document...
-                      </>
-                    ) : (
-                      'Get Credential'
-                    )}
-                  </button>
-                  <button
-                    onClick={() => {
-                      setSelectedType(null);
-                      setProofFile(null);
-                    }}
-                    className="w-full text-gray-400 hover:text-gray-200 py-2 text-sm"
-                  >
-                    ← Back to verification types
-                  </button>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-200 mb-2">
+                          Upload Proof Document
+                        </label>
+                        <div
+                          onDragOver={handleDragOver}
+                          onDragLeave={handleDragLeave}
+                          onDrop={handleDrop}
+                          className={`border-2 border-dashed rounded-lg p-6 text-center transition-colors ${
+                            isDragOver 
+                              ? 'border-purple-400 bg-purple-900/30' 
+                              : 'border-gray-700 hover:border-purple-400'
+                          }`}
+                        >
+                          <Upload className="mx-auto h-12 w-12 text-gray-400 mb-2" />
+                          <p className="text-sm text-gray-300 mb-2">
+                            Drag and drop your document here, or
+                          </p>
+                          <input
+                            type="file"
+                            id="file-upload"
+                            onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+                            className="hidden"
+                            accept=".pdf,.jpg,.jpeg,.png,.doc,.docx"
+                          />
+                          <label
+                            htmlFor="file-upload"
+                            className="inline-flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 cursor-pointer transition-colors"
+                          >
+                            Choose File
+                          </label>
+                          {proofFile && (
+                            <p className="mt-2 text-sm text-green-400">
+                              ✓ {proofFile.name}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        onClick={handleVerify}
+                        disabled={!proofFile || isLoading}
+                        className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white py-3 rounded-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                      >
+                        {isLoading ? (
+                          <>
+                            <Loader2 className="animate-spin" size={20} />
+                            Processing Document...
+                          </>
+                        ) : (
+                          'Get Credential'
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSelectedType(null);
+                          setProofFile(null);
+                        }}
+                        className="w-full text-gray-400 hover:text-gray-200 py-2 text-sm"
+                      >
+                        ← Back to verification types
+                      </button>
+                    </>
+                  )}
                 </div>
               )}
             </div>

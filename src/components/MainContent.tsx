@@ -4,6 +4,7 @@ import StakePools from './StakePools';
 import Hackathons from './Hackathons';
 import Jobs from './Jobs';
 import ActivityDashboard from './ActivityDashboard';
+import YourPosts from './YourPosts';
 import BuyPanel from './BuyPanel';
 
 interface MainContentProps {
@@ -12,7 +13,7 @@ interface MainContentProps {
 }
 
 const MainContent: React.FC<MainContentProps> = ({ onJoinStakePool, onApplyJob }) => {
-  const [activeTab, setActiveTab] = useState<'pools' | 'activity'>('pools');
+  const [activeTab, setActiveTab] = useState<'pools' | 'activity' | 'posts'>('pools');
 
   return (
   <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -38,10 +39,20 @@ const MainContent: React.FC<MainContentProps> = ({ onJoinStakePool, onApplyJob }
         >
           Your Activity
         </button>
+        <button
+          onClick={() => setActiveTab('posts')}
+      className={`flex-1 px-4 py-3 rounded-lg font-medium transition-all ${
+            activeTab === 'posts'
+        ? 'bg-black text-white shadow-lg tab-active accent-gradient-text'
+              : 'bg-gray-900 text-gray-400 hover:text-white hover:bg-black'
+          }`}
+        >
+          Your Posts
+        </button>
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'pools' ? (
+  {activeTab === 'pools' ? (
         <>
           <BuyPanel />
           <section className="glow-section mb-8">
@@ -64,8 +75,10 @@ const MainContent: React.FC<MainContentProps> = ({ onJoinStakePool, onApplyJob }
             <Jobs onApplyJob={onApplyJob} />
           </section>
         </>
-      ) : (
+      ) : activeTab === 'activity' ? (
         <ActivityDashboard />
+      ) : (
+        <YourPosts />
       )}
     </main>
   );

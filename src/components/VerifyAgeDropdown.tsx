@@ -1,18 +1,16 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { CheckCircle, ChevronDown, Calendar, Trophy, Briefcase } from 'lucide-react';
+import { ChevronDown, Calendar, Trophy, Briefcase, Shield } from 'lucide-react';
+import { useVerification } from '../contexts/VerificationContext';
 
 interface VerifyAgeDropdownProps {
-  isVerified: boolean;
-  verificationDate: string | null;
   onVerificationClick: (type: 'age' | 'hackathon-creator' | 'recruiter') => void;
 }
 
-const VerifyAgeDropdown: React.FC<VerifyAgeDropdownProps> = ({
-  isVerified,
-  verificationDate,
-  onVerificationClick
-}) => {
+const VerifyAgeDropdown: React.FC<VerifyAgeDropdownProps> = ({ onVerificationClick }) => {
   const [isOpen, setIsOpen] = useState(false);
+  const { isTypeVerified } = useVerification();
+  const ageVerified = isTypeVerified('age');
+  const recruiterVerified = isTypeVerified('recruiter');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const verificationOptions = [
@@ -21,14 +19,6 @@ const VerifyAgeDropdown: React.FC<VerifyAgeDropdownProps> = ({
     { id: 'hackathon-creator', label: 'Hackathon Creator', icon: <Trophy size={16} /> }
   ];
 
-  const formatDate = (dateString: string | null) => {
-    if (!dateString) return '';
-    return new Date(dateString).toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric',
-      year: 'numeric'
-    });
-  };
 
   const handleOptionClick = (type: 'age' | 'hackathon-creator' | 'recruiter') => {
     onVerificationClick(type);
@@ -49,31 +39,23 @@ const VerifyAgeDropdown: React.FC<VerifyAgeDropdownProps> = ({
     };
   }, []);
 
-  if (isVerified) {
-    return (
-      <button
-        className="px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold transform hover:scale-105 bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white cursor-default shadow-lg shadow-green-500/25 animate-pulse"
-        disabled
-      >
-        <CheckCircle size={16} className="animate-bounce" />
-        <div className="flex flex-col items-start">
-          <span className="text-sm">Age Verified ✓</span>
-          {verificationDate && (
-            <span className="text-xs opacity-80">
-              {formatDate(verificationDate)}
-            </span>
-          )}
-        </div>
-      </button>
-    );
-  }
-
   return (
     <div className="relative" ref={dropdownRef}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="px-4 py-2 rounded-md transition-all duration-300 flex items-center gap-2 font-semibold transform hover:scale-105 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white shadow-lg shadow-blue-500/25"
       >
+        <div className="flex items-center gap-1 mr-1" aria-label="Verification indicators">
+          <span
+            title="Age status"
+            className={`inline-block h-2 w-2 rounded-full ${ageVerified ? 'bg-green-500' : 'bg-gray-500/60'}`}
+          />
+          <span
+            title="Recruiter status"
+            className={`inline-block h-2 w-2 rounded-full ${recruiterVerified ? 'bg-green-500' : 'bg-gray-500/60'}`}
+          />
+        </div>
+        <Shield size={16} />
         Verify
         <ChevronDown size={14} className={`transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
@@ -86,7 +68,7 @@ const VerifyAgeDropdown: React.FC<VerifyAgeDropdownProps> = ({
               {verificationOptions.map((option) => (
                 <button
                   key={option.id}
-                  onClick={() => handleOptionClick(option.id as any)}
+                  onClick={() => handleOptionClick(option.id as 'age' | 'hackathon-creator' | 'recruiter')}
                   className="w-full px-4 py-3 text-left hover:bg-white/10 transition-colors flex items-center gap-3 text-gray-100 rounded-lg"
                 >
                   {option.icon}
