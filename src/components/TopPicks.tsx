@@ -1,7 +1,11 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Star, TrendingUp } from 'lucide-react';
 import ExpandableCard from './ExpandableCard';
 import { topPicks, stakePools, hackathons, jobs } from '../data/mockData';
+import StakeModal from './StakeModal';
+import VerificationModal from './VerificationModal';
+import { useVerification } from '../contexts/VerificationContext';
+import { EXPECTED_CHAIN_ID, STAKING_CONTRACT_ADDRESS, TOKEN_ADDRESS } from '../config/staking';
 
 interface TopPicksProps {
   onJoinStakePool?: (poolId: string) => void;
@@ -14,6 +18,11 @@ const TopPicks: React.FC<TopPicksProps> = ({
   onJoinHackathon,
   onApplyJob
 }) => {
+  const { verificationState, setVerified } = useVerification();
+  const [showStakeModal, setShowStakeModal] = useState(false);
+  const [showVerificationModal, setShowVerificationModal] = useState(false);
+  const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'stake-pool': return '◼';
@@ -121,7 +130,20 @@ const TopPicks: React.FC<TopPicksProps> = ({
     if (!item) return undefined;
     switch (pick.type) {
       case 'stake-pool':
-        return onJoinStakePool ? () => onJoinStakePool(item.id) : undefined;
+        // Use the same gating + modal flow as StakePools
+        return () => {
+          const pool = stakePools.find(p => p.id === item.id);
+          if (!pool) return;
+          if (pool.requiresAge18 && !verificationState.isVerified) {
+            setSelectedPoolId(pool.id);
+            setShowVerificationModal(true);
+            return;
+          }
+          setSelectedPoolId(pool.id);
+          setShowStakeModal(true);
+          // Also allow external handler if provided (analytics, etc.)
+          if (onJoinStakePool) onJoinStakePool(pool.id);
+        };
       case 'hackathon':
         return onJoinHackathon ? () => onJoinHackathon(item.id) : undefined;
       case 'job':
@@ -177,6 +199,35 @@ const TopPicks: React.FC<TopPicksProps> = ({
           );
         })}
       </div>
+
+      {/* Modals for stake-pool picks */}
+      {selectedPoolId && (
+        <StakeModal
+          isOpen={showStakeModal}
+          onClose={() => { setShowStakeModal(false); setSelectedPoolId(null); }}
+          poolName={stakePools.find(p => p.id === selectedPoolId)?.name || 'Stake Pool'}
+          poolId={selectedPoolId}
+          minStake={stakePools.find(p => p.id === selectedPoolId)?.minStake || '1 tPOL'}
+          apy={stakePools.find(p => p.id === selectedPoolId)?.apy || '0%'}
+          requiredToken={{ symbol: 'tPOL', address: TOKEN_ADDRESS, decimals: 18 }}
+          requiredChainId={EXPECTED_CHAIN_ID}
+          stakingContractAddress={STAKING_CONTRACT_ADDRESS}
+        />
+      )}
+
+      <VerificationModal
+        isOpen={showVerificationModal}
+        onClose={() => setShowVerificationModal(false)}
+        onVerificationComplete={(success) => {
+          setShowVerificationModal(false);
+          if (success && selectedPoolId) {
+            setVerified(true, 'age');
+            setShowStakeModal(true);
+          } else if (!success) {
+            setSelectedPoolId(null);
+          }
+        }}
+      />
     </section>
   );
 };

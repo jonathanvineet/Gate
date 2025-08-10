@@ -12,7 +12,8 @@ type AppState =
   | 'dashboard' 
   | 'verification-result' 
   | 'create-form' 
-  | 'placeholder';
+  | 'placeholder'
+  | 'dex-playground';
 
 function App() {
   const [user, setUser] = useState<User>({
@@ -139,6 +140,17 @@ function App() {
     );
   }
 
+  if (appState === 'dex-playground') {
+    const DexApiPlayground = React.lazy(() => import('./pages/DexApiPlayground'));
+    return (
+      <VerificationProvider>
+        <React.Suspense fallback={<div className="p-6">Loading DEX API Playground…</div>}>
+          <DexApiPlayground onBack={handleBackToDashboard} />
+        </React.Suspense>
+      </VerificationProvider>
+    );
+  }
+
   return (
     <VerificationProvider>
       <div className="min-h-screen relative">
@@ -150,6 +162,7 @@ function App() {
           onWalletDisconnect={handleWalletDisconnect}
           onVerify={handleVerify}
           onCreateSelect={handleCreateSelect}
+          onOpenDexPlayground={() => setAppState('dex-playground')}
         />
         
         <MainContent

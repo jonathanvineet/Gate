@@ -30,6 +30,9 @@ const ActivityDashboard: React.FC = () => {
   useEffect(() => {
     stakingRecords.initializeFromCSV();
     loadActivity();
+    const onUpdated = () => setRefreshTrigger(prev => prev + 1);
+    window.addEventListener('stake-records-updated', onUpdated as any);
+    return () => window.removeEventListener('stake-records-updated', onUpdated as any);
   }, [refreshTrigger]);
 
   const loadActivity = () => {
@@ -164,6 +167,7 @@ const ActivityDashboard: React.FC = () => {
   return (
     <>
       <div className="space-y-6">
+        <div id="activity-dashboard" />
         {/* Summary Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">

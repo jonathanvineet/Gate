@@ -149,6 +149,10 @@ class CSVLogger {
 
       localStorage.setItem(this.STORAGE_KEY, csvData);
       console.log('✅ Stake record added to CSV:', newRecord);
+      // Notify listeners that records updated
+      try {
+        window.dispatchEvent(new CustomEvent('stake-records-updated'));
+      } catch {}
     } catch (error) {
       console.error('Error adding stake record:', error);
     }
@@ -177,6 +181,10 @@ class CSVLogger {
 
       localStorage.setItem(this.STORAGE_KEY, csvData);
       console.log('✅ Unstake record added to CSV:', newRecord);
+      // Notify listeners that records updated
+      try {
+        window.dispatchEvent(new CustomEvent('stake-records-updated'));
+      } catch {}
     } catch (error) {
       console.error('Error adding unstake record:', error);
     }
@@ -235,6 +243,9 @@ class CSVLogger {
   public clearAllRecords(): void {
     localStorage.removeItem(this.STORAGE_KEY);
     console.log('🗑️ All stake records cleared');
+    try {
+      window.dispatchEvent(new CustomEvent('stake-records-updated'));
+    } catch {}
   }
 
   // Get summary statistics

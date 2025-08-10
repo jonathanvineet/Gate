@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { ethers } from 'ethers';
+import { STAKING_CONTRACT_ADDRESS as CFG_STAKING, TOKEN_ADDRESS as CFG_TOKEN, EXPECTED_CHAIN_ID as CFG_CHAIN } from '../config/staking';
 
 // Ensure window.ethereum is properly typed
 declare global {
@@ -9,10 +10,10 @@ declare global {
   }
 }
 
-const STAKING_CONTRACT_ADDRESS = '0x63D5c4B45517Aaa4D4A7B1cc7c958a4389dADe02';
-
-// Your specific token address
-const TOKEN_ADDRESS = '0x561Fc8Bb28769374E3060f0A33634517aF682379';
+const DEFAULT_STAKING_CONTRACT_ADDRESS = CFG_STAKING;
+const DEFAULT_EXPECTED_CHAIN_ID = CFG_CHAIN;
+// Default token address
+const DEFAULT_TOKEN_ADDRESS = CFG_TOKEN;
 
 const STAKING_ABI = [
   {
@@ -499,6 +500,10 @@ interface StakingState {
   totalStaked?: string;
 }
 
+// Simple in-memory cache for token metadata per address
+const tokenMetaCache: Record<string, { symbol: string; name: string; decimals: number }> = {};
+const inFlightMeta: Record<string, Promise<{ symbol: string; name: string; decimals: number }>> = {};
+
 // Add this new utility function for enhanced error detection
 const isContractCallError = (error: any): boolean => {
   return (
@@ -508,12 +513,30 @@ const isContractCallError = (error: any): boolean => {
   );
 };
 
-export const useStakingContract = () => {
+export const useStakingContract = (overrides?: { contractAddress?: string; tokenAddress?: string; expectedChainId?: number; }) => {
+  const STAKING_CONTRACT_ADDRESS = overrides?.contractAddress || DEFAULT_STAKING_CONTRACT_ADDRESS;
+  const EXPECTED_CHAIN_ID = typeof overrides?.expectedChainId === 'number' ? (overrides!.expectedChainId as number) : DEFAULT_EXPECTED_CHAIN_ID;
+  const TOKEN_ADDRESS = overrides?.tokenAddress || DEFAULT_TOKEN_ADDRESS;
   const [stakingState, setStakingState] = useState<StakingState>({
     isLoading: false,
     error: null,
     txHash: null
   });
+
+  const getPublicRpcForChain = (chainId?: number): string | null => {
+    switch (chainId ?? DEFAULT_EXPECTED_CHAIN_ID) {
+      case 80002: // Polygon Amoy
+        return 'https://rpc-amoy.polygon.technology';
+      case 137: // Polygon mainnet
+        return 'https://polygon-rpc.com';
+      case 1: // Ethereum mainnet
+        return 'https://cloudflare-eth.com';
+      case 11155111: // Sepolia
+        return 'https://rpc.sepolia.org';
+      default:
+        return null;
+    }
+  };
 
   const connectWallet = async () => {
     if (typeof window === 'undefined' || typeof window.ethereum === 'undefined') {
@@ -562,7 +585,7 @@ export const useStakingContract = () => {
     for (let i = 0; i < maxRetries; i++) {
       try {
         return await rpcCall();
-      } catch (error: any) {
+  } catch (error: any) {
         lastError = error;
         console.warn(`RPC call attempt ${i + 1} failed:`, error);
 
@@ -573,7 +596,9 @@ export const useStakingContract = () => {
         }
 
         // Network errors get longer retry delays
-        if (error.message?.includes('missing trie node') || error.code === -32603) {
+  const msg: string = (error as any)?.message || '';
+  const code: any = (error as any)?.code;
+  if (msg.includes('missing trie node') || code === -32603) {
           await new Promise(resolve => setTimeout(resolve, 2000 * (i + 1)));
         } else {
           await new Promise(resolve => setTimeout(resolve, 500 * (i + 1)));
@@ -603,7 +628,12 @@ export const useStakingContract = () => {
     if (isNodeSyncIssue) {
       errorMessage = 'Network node synchronization issues. Using development mode with mock data.';
     } else if (isContractIssue) {
-      errorMessage = 'The token contract appears to be invalid or not properly implemented. Using mock data for testing.';
+      const dataSel = originalError?.data || originalError?.method;
+      // 0x313ce567 is decimals() selector
+      const hint = (originalError?.message?.includes('0x313ce567') || dataSel === '0x313ce567')
+        ? 'decimals() call failed; token may be non-standard or the address is wrong for this network.'
+        : 'The token contract appears to be invalid or not properly implemented.';
+      errorMessage = `${hint} Using mock data for testing.`;
     } else if (originalError?.message?.includes('Internal JSON-RPC error')) {
       errorMessage = 'RPC endpoint connectivity issues. Using development mode with mock data.';
     } else {
@@ -622,15 +652,46 @@ export const useStakingContract = () => {
     return { tokenInfo: fallbackTokenInfo, totalStaked: '50.0' };
   };
 
-  // Modified to use hardcoded token address
-  const loadTokenInfo = useCallback(async () => {
+  // Modified to use hardcoded token address, with memoized metadata
+  const loadTokenInfo = useCallback(async (opts?: { force?: boolean; refreshBalancesOnly?: boolean }) => {
     try {
-      console.log('Loading token info for:', TOKEN_ADDRESS);
+      const addrKey = (TOKEN_ADDRESS || '').toLowerCase();
+      if (!opts?.force && stakingState.tokenInfo && addrKey === stakingState.tokenInfo.address.toLowerCase() && opts?.refreshBalancesOnly) {
+        // Only refresh dynamic fields below
+      } else {
+        console.log('Loading token info for:', TOKEN_ADDRESS);
+      }
       const provider = await connectWallet();
       const signer = await provider.getSigner();
       const userAddress = await signer.getAddress();
+      // Ensure the token address has contract code (retry once with public RPC on node sync errors)
+      let hasCode = false;
+      try {
+        const code = await provider.getCode(TOKEN_ADDRESS);
+        hasCode = !!code && code !== '0x';
+      } catch (codeErr: any) {
+        console.warn('Token address code check failed on wallet RPC:', codeErr?.message || codeErr);
+        const msg: string = codeErr?.message || '';
+        const isNodeSyncIssue = msg.includes('missing trie node') || codeErr?.code === -32000 || codeErr?.code === -32603;
+        if (isNodeSyncIssue) {
+          const rpc = getPublicRpcForChain(EXPECTED_CHAIN_ID);
+          if (rpc) {
+            try {
+              const { JsonRpcProvider } = ethers;
+              const ro = new JsonRpcProvider(rpc);
+              const code2 = await ro.getCode(TOKEN_ADDRESS);
+              hasCode = !!code2 && code2 !== '0x';
+            } catch (e2) {
+              console.warn('Public RPC code check also failed:', (e2 as any)?.message || e2);
+            }
+          }
+        }
+      }
+      if (!hasCode) {
+        return await provideFallbackTokenInfo(new Error(`Token address ${TOKEN_ADDRESS} code not available (RPC sync issue or wrong address).`));
+      }
       
-      // Direct token contract initialization with known address
+  // Direct token contract initialization with known address
       let tokenContract;
       try {
         tokenContract = await getTokenContract();
@@ -641,66 +702,102 @@ export const useStakingContract = () => {
       }
 
       // Get token info with individual error handling and retries
-      let symbol = 'Unknown';
-      let name = 'Unknown Token';
-      let decimals = 18;
+  let symbol = 'Unknown';
+  let name = 'Unknown Token';
+  let decimals = 18;
       let balance = '0';
       let allowance = '0';
       
-      try {
-        symbol = await retryRpcCall(() => tokenContract.symbol());
-        console.log('Token symbol:', symbol);
-      } catch (error) {
-        console.error('Error getting token symbol:', error);
-        if (error.message?.includes('missing trie node') || error.code === -32603) {
-          return await provideFallbackTokenInfo(error);
+      // Resolve metadata using cache or fetch if missing/forced
+      const fillMetaFromCache = () => {
+        const cached = tokenMetaCache[addrKey];
+        if (cached) {
+          symbol = cached.symbol;
+          name = cached.name;
+          decimals = cached.decimals;
+          return true;
         }
-        // Continue with default symbol rather than failing
-        console.warn('Using default symbol: TT');
+        return false;
+      };
+
+      let metaReady = !opts?.force && fillMetaFromCache();
+      if (!metaReady) {
+        try {
+          // De-duplicate concurrent metadata fetches
+          if (!inFlightMeta[addrKey]) {
+            inFlightMeta[addrKey] = (async () => {
+              let sym = 'Unknown';
+              let nm = 'Unknown Token';
+              let dec = 18;
+              try {
+                sym = await retryRpcCall(() => tokenContract.symbol());
+              } catch (error: any) {
+                const msg: string = (error as any)?.message || '';
+                const code: any = (error as any)?.code;
+                if (msg.includes('missing trie node') || code === -32603) {
+                  throw error;
+                }
+              }
+              try {
+                nm = await retryRpcCall(() => tokenContract.name());
+              } catch {
+                nm = sym || 'Test Token';
+              }
+              try {
+                const d = await retryRpcCall(() => tokenContract.decimals());
+                dec = Number(d);
+                if (!Number.isFinite(dec)) throw new Error('Invalid decimals value');
+              } catch {
+                dec = 18;
+              }
+              return { symbol: sym || 'TT', name: nm || 'Test Token', decimals: dec };
+            })();
+          }
+          const meta = await inFlightMeta[addrKey];
+          tokenMetaCache[addrKey] = meta;
+          delete inFlightMeta[addrKey];
+          symbol = meta.symbol;
+          name = meta.name;
+          decimals = meta.decimals;
+          metaReady = true;
+          console.log('Token metadata cached:', meta);
+        } catch (error: any) {
+          delete inFlightMeta[addrKey];
+          console.error('Error getting token metadata:', error);
+          const msg: string = (error as any)?.message || '';
+          const code: any = (error as any)?.code;
+          if (msg.includes('missing trie node') || code === -32603) {
+            return await provideFallbackTokenInfo(error);
+          }
+        }
       }
       
-      try {
-        name = await retryRpcCall(() => tokenContract.name());
-        console.log('Token name:', name);
-      } catch (error) {
-        console.error('Error getting token name:', error);
-        name = symbol || 'Test Token';
-      }
-      
-      try {
-        decimals = await retryRpcCall(() => tokenContract.decimals());
-        console.log('Token decimals:', decimals);
-      } catch (error) {
-        console.error('Error getting token decimals:', error);
-        console.warn('Using default decimals: 18');
-      }
-      
-      try {
+  try {
         const balanceRaw = await retryRpcCall(() => tokenContract.balanceOf(userAddress));
         balance = ethers.formatUnits(balanceRaw, decimals);
         console.log('User balance:', balance);
-      } catch (error) {
+  } catch (error: any) {
         console.error('Error getting token balance:', error);
         balance = '100'; // Give some default balance for testing
       }
       
-      try {
+  try {
         const allowanceRaw = await retryRpcCall(() => tokenContract.allowance(userAddress, STAKING_CONTRACT_ADDRESS));
         allowance = ethers.formatUnits(allowanceRaw, decimals);
         console.log('Token allowance:', allowance);
-      } catch (error) {
+  } catch (error: any) {
         console.error('Error getting token allowance:', error);
         allowance = '0';
       }
 
       // Try to get total staked from contract
       let totalStaked = '0';
-      try {
+  try {
         const contract = await getContract();
         const totalStakedRaw = await retryRpcCall(() => contract.totalStaked());
         totalStaked = ethers.formatUnits(totalStakedRaw, decimals);
         console.log('Total staked:', totalStaked);
-      } catch (error) {
+  } catch (error: any) {
         console.error('Error getting total staked:', error);
         totalStaked = '25.0'; // Mock value
       }
@@ -732,8 +829,19 @@ export const useStakingContract = () => {
       
       const tokenContract = await getTokenContract();
       
-      // Get token decimals
-      const decimals = await tokenContract.decimals();
+      // Get token decimals with fallback (some tokens don't implement decimals())
+      let decimals: number = 18;
+      try {
+        // Prefer already loaded tokenInfo to avoid extra RPC and potential CALL_EXCEPTION
+        if (stakingState.tokenInfo?.decimals != null) {
+          decimals = Number(stakingState.tokenInfo.decimals);
+        } else {
+          decimals = Number(await tokenContract.decimals());
+        }
+      } catch (e) {
+        console.warn('Failed to read token decimals for approve; defaulting to 18');
+        decimals = 18;
+      }
       const amountWei = ethers.parseUnits(amount, decimals);
       
       console.log('💰 Approving amount in token units:', amountWei.toString());
@@ -792,8 +900,64 @@ export const useStakingContract = () => {
       const signer = await provider.getSigner();
       const contract = await getContract();
 
-      const amountWei = ethers.parseUnits(amount, 18);
+      // Network check
+      try {
+        const net = await provider.getNetwork();
+        const cid = Number(net.chainId?.toString?.() ?? net.chainId);
+        if (!Number.isNaN(EXPECTED_CHAIN_ID) && cid !== EXPECTED_CHAIN_ID) {
+          const msg = `Wrong network. Please switch to chainId ${EXPECTED_CHAIN_ID}. Current chainId: ${cid}`;
+          console.error(msg);
+          setStakingState(prev => ({ ...prev, isLoading: false, error: msg }));
+          return { success: false, error: msg };
+        }
+      } catch (e) {
+        console.warn('Network detection failed; proceeding');
+      }
+
+      // Use actual token decimals
+      const tokenContract = await getTokenContract();
+      let decimals = 18;
+      try {
+        decimals = stakingState.tokenInfo?.decimals ?? Number(await tokenContract.decimals());
+      } catch (e) {
+        console.warn('Failed to read token decimals; defaulting to 18');
+        decimals = 18;
+      }
+      const amountWei = ethers.parseUnits(amount, decimals);
       console.log('Amount in Wei:', amountWei.toString());
+
+      // Preflight: balance and allowance checks
+      try {
+        const user = await signer.getAddress();
+        const [balRaw, allowanceRaw] = await Promise.all([
+          tokenContract.balanceOf(user),
+          tokenContract.allowance(user, STAKING_CONTRACT_ADDRESS)
+        ]);
+        if (balRaw < amountWei) {
+          const msg = `Insufficient token balance. Need ${amount}, have ${ethers.formatUnits(balRaw, decimals)}`;
+          setStakingState(prev => ({ ...prev, isLoading: false, error: msg }));
+          return { success: false, error: msg };
+        }
+        if (allowanceRaw < amountWei) {
+          const msg = 'Token allowance too low. Please approve the token amount first.';
+          setStakingState(prev => ({ ...prev, isLoading: false, error: msg }));
+          return { success: false, error: msg };
+        }
+      } catch (e:any) {
+        console.warn('Preflight (balance/allowance) failed:', e?.message || e);
+      }
+
+      // Static call to catch reverts early (no state change)
+      try {
+        // ethers v6 static call
+        // @ts-ignore - type inference sometimes misses staticCall
+        await contract.stake.staticCall(amountWei);
+      } catch (simErr:any) {
+        const msg = `Transaction simulation failed: ${simErr?.reason || simErr?.message || 'Unknown error'}`;
+        console.error(msg);
+        setStakingState(prev => ({ ...prev, isLoading: false, error: msg }));
+        return { success: false, error: msg };
+      }
 
       // Enhanced gas estimation with fallback
       let gasLimit;
@@ -834,8 +998,8 @@ export const useStakingContract = () => {
       console.log('📝 Transaction options:', txOptions);
 
       // Check user balance before transaction
-      const userAddress = await signer.getAddress();
-      const balance = await provider.getBalance(userAddress);
+  const userAddress = await signer.getAddress();
+  const balance = await provider.getBalance(userAddress);
       const estimatedCost = gasLimit * (gasPrice || 20000000000n); // fallback 20 gwei
       
       if (balance < estimatedCost) {
@@ -902,7 +1066,7 @@ export const useStakingContract = () => {
 
       setStakingState(prev => ({ ...prev, txHash: tx.hash }));
 
-      console.log('⏳ Waiting for confirmation...');
+  console.log('⏳ Waiting for confirmation...');
       const receipt = await tx.wait();
       
       if (receipt?.status === 1) {
@@ -977,8 +1141,14 @@ export const useStakingContract = () => {
       
       const tokenContract = await getTokenContract();
       
-      // Get token decimals
-      const decimals = await tokenContract.decimals();
+      // Get token decimals with fallback
+      let decimals: number = 18;
+      try {
+        decimals = stakingState.tokenInfo?.decimals ?? Number(await tokenContract.decimals());
+      } catch (e) {
+        console.warn('Failed to read token decimals for unstake; defaulting to 18');
+        decimals = 18;
+      }
       const amountWei = ethers.parseUnits(amount, decimals);
       
       console.log('Amount in Wei for unstaking:', amountWei.toString());
@@ -1157,7 +1327,12 @@ export const useStakingContract = () => {
       const contract = await getContract();
       const stakeAmount = await contract.stakedBalance(address);
       const tokenContract = await getTokenContract();
-      const decimals = await tokenContract.decimals();
+      let decimals: number = 18;
+      try {
+        decimals = stakingState.tokenInfo?.decimals ?? Number(await tokenContract.decimals());
+      } catch {
+        decimals = 18;
+      }
       return ethers.formatUnits(stakeAmount, decimals);
     } catch (error) {
       console.error('Error getting stake amount:', error);
@@ -1169,7 +1344,12 @@ export const useStakingContract = () => {
     try {
       const contract = await getContract();
       const stakeAmount = await contract.stakes(address);
-      return ethers.formatEther(stakeAmount);
+      let decimals: number = 18;
+      try {
+        const tokenContract = await getTokenContract();
+        decimals = stakingState.tokenInfo?.decimals ?? Number(await tokenContract.decimals());
+      } catch {}
+      return ethers.formatUnits(stakeAmount, decimals);
     } catch (error) {
       console.error('Error getting stake amount from mapping:', error);
       return '0';
@@ -1192,7 +1372,12 @@ export const useStakingContract = () => {
       
       // Get token decimals for proper formatting
       const tokenContract = await getTokenContract();
-      const decimals = await tokenContract.decimals();
+      let decimals: number = 18;
+      try {
+        decimals = stakingState.tokenInfo?.decimals ?? Number(await tokenContract.decimals());
+      } catch {
+        decimals = 18;
+      }
       
       return ethers.formatUnits(totalStakedRaw, decimals);
     } catch (error) {

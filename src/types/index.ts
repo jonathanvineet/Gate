@@ -19,6 +19,15 @@ export interface StakePool {
   risk: 'Low' | 'Medium' | 'High';
   minStake: string;
   requiresAge18: boolean;
+  // New: required token and chain for staking this pool
+  requiredToken?: {
+    symbol: string;           // e.g., 'ETH', 'POL', 'USDC'
+    address: string;          // ERC20 token address on the chain (0x0 for native)
+    decimals?: number;        // default 18
+  };
+  chainId?: number;           // EVM chain id where this pool lives
+  // New: per-pool staking contract address (deployed instance for this token/pool)
+  stakingContractAddress?: string;
 }
 
 export interface Hackathon {

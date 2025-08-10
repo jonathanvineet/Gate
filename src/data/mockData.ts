@@ -2,14 +2,30 @@ import { StakePool, Hackathon, Job, TopPick } from '../types';
 
 export const stakePools: StakePool[] = [
   {
+    id: 'amoy-1',
+    name: 'Amoy Test Pool',
+    apy: '10.0%',
+    tvl: '$0',
+    description: 'Polygon Amoy test staking pool for integration testing.',
+    risk: 'Low',
+    minStake: '1 tPOL',
+    requiresAge18: false,
+    requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+    chainId: 80002,
+    stakingContractAddress: '0x7D0ce8CB4F3615A1c9437026b2b53d2C58a9a976'
+  },
+  {
     id: '1',
     name: 'DeFi Yield Pro',
     apy: '12.5%',
     tvl: '$2.3M',
     description: 'High-yield staking pool with automated compounding and risk management protocols.',
     risk: 'Medium',
-    minStake: '100 USDC',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '2', 
@@ -18,8 +34,11 @@ export const stakePools: StakePool[] = [
     tvl: '$5.7M',
     description: 'Conservative staking strategy focused on stable returns and capital preservation.',
     risk: 'Low',
-    minStake: '50 USDC',
-    requiresAge18: false
+  minStake: '1 tPOL',
+  requiresAge18: false,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '3',
@@ -28,8 +47,11 @@ export const stakePools: StakePool[] = [
     tvl: '$890K',
     description: 'Aggressive growth pool targeting emerging DeFi protocols with high potential.',
     risk: 'High',
-    minStake: '500 USDC',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '4',
@@ -38,8 +60,11 @@ export const stakePools: StakePool[] = [
     tvl: '$12.1M',
     description: 'Direct Ethereum 2.0 staking with institutional-grade security and monitoring.',
     risk: 'Low',
-    minStake: '32 ETH',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '5',
@@ -48,8 +73,11 @@ export const stakePools: StakePool[] = [
     tvl: '$1.8M',
     description: 'Automated arbitrage opportunities across multiple blockchain networks.',
     risk: 'High',
-    minStake: '1000 USDC',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '6',
@@ -58,8 +86,11 @@ export const stakePools: StakePool[] = [
     tvl: '$4.2M',
     description: 'Liquid staking with additional yield farming opportunities and governance tokens.',
     risk: 'Medium',
-    minStake: '200 USDC',
-    requiresAge18: false
+  minStake: '1 tPOL',
+  requiresAge18: false,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '7',
@@ -68,8 +99,11 @@ export const stakePools: StakePool[] = [
     tvl: '$650K',
     description: 'Machine learning-powered trading strategies with real-time market analysis.',
     risk: 'High',
-    minStake: '750 USDC',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '8',
@@ -78,8 +112,11 @@ export const stakePools: StakePool[] = [
     tvl: '$8.9M',
     description: 'Diversified portfolio of top-tier cryptocurrencies with automated rebalancing.',
     risk: 'Low',
-    minStake: '100 USDC',
-    requiresAge18: false
+  minStake: '1 tPOL',
+  requiresAge18: false,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '9',
@@ -88,8 +125,11 @@ export const stakePools: StakePool[] = [
     tvl: '$1.3M',
     description: 'Innovative yield farming using NFTs as collateral and reward mechanisms.',
     risk: 'Medium',
-    minStake: '300 USDC',
-    requiresAge18: true
+  minStake: '1 tPOL',
+  requiresAge18: true,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   },
   {
     id: '10',
@@ -98,8 +138,11 @@ export const stakePools: StakePool[] = [
     tvl: '$3.1M',
     description: 'Optimized staking across Layer 2 solutions for maximum efficiency and lower fees.',
     risk: 'Medium',
-    minStake: '150 USDC',
-    requiresAge18: false
+  minStake: '1 tPOL',
+  requiresAge18: false,
+  requiredToken: { symbol: 'tPOL', address: '0x361D2689F8aaC8e1EB4A810Aa928fc9C78f608ca', decimals: 18 },
+  chainId: 80002,
+  // stakingContractAddress: '0x...'
   }
 ];
 

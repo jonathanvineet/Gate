@@ -15,6 +15,7 @@ interface HeaderProps {
   onWalletDisconnect: () => void;
   onVerify: (type: 'age' | 'hackathon-creator' | 'recruiter', proof: File) => void;
   onCreateSelect: (type: 'stake-pool' | 'hackathon' | 'job') => void;
+  onOpenDexPlayground?: () => void;
 }
 
 const Header: React.FC<HeaderProps> = ({
@@ -22,7 +23,8 @@ const Header: React.FC<HeaderProps> = ({
   onWalletConnect,
   onWalletDisconnect,
   onVerify,
-  onCreateSelect
+  onCreateSelect,
+  onOpenDexPlayground
 }) => {
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   const [selectedVerificationType, setSelectedVerificationType] = useState<'age' | 'hackathon-creator' | 'recruiter'>('age');
@@ -107,6 +109,16 @@ const Header: React.FC<HeaderProps> = ({
                 onConnect={onWalletConnect}
                 onDisconnect={onWalletDisconnect}
               />
+
+              {process.env.NODE_ENV === 'development' && (
+                <button
+                  onClick={() => onOpenDexPlayground && onOpenDexPlayground()}
+                  className="px-2 py-1 bg-purple-600 hover:bg-purple-700 text-white text-xs rounded transition-colors"
+                  title="DEX API Playground (dev only)"
+                >
+                  DEX API
+                </button>
+              )}
             </div>
           </div>
         </div>

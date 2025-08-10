@@ -4,13 +4,12 @@ import ExpandableCard from './ExpandableCard';
 import VerificationModal from './VerificationModal';
 import StakeModal from './StakeModal';
 import { stakePools } from '../data/mockData';
+import { EXPECTED_CHAIN_ID, STAKING_CONTRACT_ADDRESS, TOKEN_ADDRESS } from '../config/staking';
 import { useVerification } from '../contexts/VerificationContext';
 
-interface StakePoolsProps {
-  onJoinStakePool: (poolId: string) => void;
-}
+interface StakePoolsProps {}
 
-const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
+const StakePools: React.FC<StakePoolsProps> = () => {
   const [showVerificationModal, setShowVerificationModal] = useState(false);
   const [showStakeModal, setShowStakeModal] = useState(false);
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
@@ -19,13 +18,6 @@ const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
   const getRiskColor = (_risk: string) => 'text-white bg-black';
 
   const handleJoinPool = (poolId: string) => {
-    // Emit parent callback for external tracking/side-effects
-    try {
-      onJoinStakePool?.(poolId);
-    } catch (_) {
-      // no-op if not provided
-    }
-
     const pool = stakePools.find(p => p.id === poolId);
     
     console.log('🎯 StakePools: Attempting to join pool', {
@@ -133,6 +125,15 @@ const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
                     Min. Stake: <span className="font-medium text-white">{pool.minStake}</span>
                   </div>
                 </div>
+                <div className="flex justify-between items-center">
+                  <div className="text-sm text-gray-400">Age Verification</div>
+                  <div className={`text-xs px-2 py-1 rounded-full font-medium ${pool.requiresAge18 ? 'bg-red-600/20 text-red-300' : 'bg-green-600/20 text-green-300'}`}>
+                    {pool.requiresAge18 ? '18+ Required' : 'Not required'}
+                  </div>
+                </div>
+                <div className="text-xs text-gray-300">
+                  Requires token: <span className="font-medium text-white">tPOL</span> on chain <span className="font-medium text-white">{EXPECTED_CHAIN_ID}</span>
+                </div>
               </div>
             }
             onJoin={() => handleJoinPool(pool.id)}
@@ -144,9 +145,16 @@ const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
                   <Shield className="text-white" size={20} />
                   <h3 className="font-semibold text-lg text-white">{pool.name}</h3>
                 </div>
-                <div className="flex items-center gap-1 bg-black px-2 py-1 rounded-full">
-                  <TrendingUp size={14} className="text-white" />
-                  <span className="text-white text-xs font-medium">{pool.apy}</span>
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-black px-2 py-1 rounded-full">
+                    <TrendingUp size={14} className="text-white" />
+                    <span className="text-white text-xs font-medium">{pool.apy}</span>
+                  </div>
+                  {pool.requiresAge18 && (
+                    <div className="bg-red-600/20 text-red-300 text-xs font-medium px-2 py-1 rounded-full">
+                      18+ Required
+                    </div>
+                  )}
                 </div>
               </div>
               <p className="text-gray-300 text-sm mb-4">{pool.description}</p>
@@ -162,8 +170,8 @@ const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
       <VerificationModal
         isOpen={showVerificationModal}
         onClose={() => {
+          // Only close the modal; keep selectedPoolId so we can open StakeModal after successful verification
           setShowVerificationModal(false);
-          setSelectedPoolId(null);
         }}
         onVerificationComplete={handleVerificationComplete}
       />
@@ -176,6 +184,10 @@ const StakePools: React.FC<StakePoolsProps> = ({ onJoinStakePool }) => {
           poolId={selectedPool.id}
           minStake={selectedPool.minStake}
           apy={selectedPool.apy}
+          // Force tPOL across all stakes
+          requiredToken={{ symbol: 'tPOL', address: TOKEN_ADDRESS, decimals: 18 }}
+          requiredChainId={EXPECTED_CHAIN_ID}
+          stakingContractAddress={STAKING_CONTRACT_ADDRESS}
         />
       )}
     </section>

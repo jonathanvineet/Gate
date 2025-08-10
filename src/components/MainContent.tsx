@@ -54,7 +54,7 @@ const MainContent: React.FC<MainContentProps> = ({
           </section>
 
           <section className="quiet-section mb-8">
-            <StakePools onJoinStakePool={onJoinStakePool} />
+            <StakePools />
           </section>
 
           <section className="glow-section mb-8">
